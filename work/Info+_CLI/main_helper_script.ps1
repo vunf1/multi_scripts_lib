@@ -3,17 +3,20 @@ $global:SystemInfoData = $null
 function Get-SystemInfo {
     Write-Host "`nRefreshing System Information..." -ForegroundColor Yellow
 
-    # Collect System Information in Parallel to Reduce Time
+    # Collect System Information in parallel using PowerShell's ForEach-Object -Parallel safely
     $SystemInfoTasks = @(
-        { (Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB },
-        { Get-CimInstance -ClassName Win32_Processor | ForEach-Object { "$( $_.Name.Trim() ) $($_.MaxClockSpeed) MHz Cores $($_.NumberOfCores) $($_.NumberOfLogicalProcessors) Socket $($_.SocketDesignation)" } },
-        { Get-CimInstance -ClassName Win32_VideoController | ForEach-Object { $_.Caption.Trim() } },
-        { (Get-CimInstance -ClassName Win32_OperatingSystem).Caption }
-    ) | ForEach-Object -Parallel {
-        Invoke-Command -ScriptBlock $_
+        { return (Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB },
+        { return Get-CimInstance -ClassName Win32_Processor | ForEach-Object { "$( $_.Name.Trim() ) $($_.MaxClockSpeed) MHz Cores $($_.NumberOfCores) $($_.NumberOfLogicalProcessors) Socket $($_.SocketDesignation)" } },
+        { return Get-CimInstance -ClassName Win32_VideoController | ForEach-Object { $_.Caption.Trim() } },
+        { return (Get-CimInstance -ClassName Win32_OperatingSystem).Caption }
+    )
+
+    $results = @()
+    foreach ($task in $SystemInfoTasks) {
+        $results += & $task
     }
 
-    $MemoryInfo, $CPUInfo, $GPUInfo, $WindowsStatus = $SystemInfoTasks
+    $MemoryInfo, $CPUInfo, $GPUInfo, $WindowsStatus = $results
 
     try {
         $ActivationRaw = cscript /nologo $env:SystemRoot\System32\slmgr.vbs /dli | Select-String -Pattern "(License Status|Estado da Licen[çc]a):.+"
@@ -65,7 +68,7 @@ function Get-SystemInfo {
     }
 }
 
-function Clean-SystemCache {
+function Clear-SystemCache {
     Write-Host "`nAre you sure you want to clean the system cache? (Y/Yes/Sim/S)" -ForegroundColor Yellow
     $confirmation = Read-Host ">>>>>"
     if ($confirmation -match '^(Y|y|Yes|Sim|S)$') {
@@ -116,6 +119,60 @@ function Clean-SystemCache {
         Write-Host "Operation cancelled by user." -ForegroundColor Red
     }
 }
+# Function to configure power settings
+function Use-ConfigurePowerSettings {
+    Write-Host "Configuring Power Settings..." -ForegroundColor Yellow
+
+    # Set the active power plan to 'High Performance'
+    <# $highPerformancePlan = (powercfg /l | Select-String -Pattern "High performance").Line.Split()[3]
+    if ($highPerformancePlan) {
+        powercfg /s $highPerformancePlan
+        Write-Host "Set power plan to High Performance." -ForegroundColor Green
+    } else {
+        Write-Host "High Performance power plan not found." -ForegroundColor Red
+    } #>
+
+    # Set sleep and screen off timers to 0
+    powercfg /change standby-timeout-ac 0
+    powercfg /change standby-timeout-dc 0
+    powercfg /change monitor-timeout-ac 0
+    powercfg /change monitor-timeout-dc 0
+    Write-Host "Set sleep and screen-off timers to 0." -ForegroundColor Green
+
+    # Disable fast startup
+    reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Power" /v HiberbootEnabled /t REG_DWORD /d 0 /f
+    Write-Host "Fast Startup has been disabled." -ForegroundColor Green
+
+    # Set screensaver to blank with a timer of 5 minutes
+    reg add "HKCU\Control Panel\Desktop" /v SCRNSAVE.EXE /t REG_SZ /d "C:\Windows\System32\scrnsave.scr" /f
+    reg add "HKCU\Control Panel\Desktop" /v ScreenSaveTimeOut /t REG_SZ /d 300 /f
+    reg add "HKCU\Control Panel\Desktop" /v ScreenSaveActive /t REG_SZ /d 1 /f
+    Write-Host "Screensaver set to blank with a timer of 5 minutes." -ForegroundColor Green
+
+    Write-Host "Power settings configured successfully." -ForegroundColor Green
+}
+
+# Function to run a specified command
+function Run-Command {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Command
+    )
+
+    try {
+        Start-Job -ScriptBlock {
+            Invoke-Expression -Command $using:Command
+        } | Out-Null
+    } catch {
+        Write-Host "Failed to run the command: $_" -ForegroundColor Red
+    }
+}
+
+# Example: Running the activation script
+function Run-ActivationScript {
+    Write-Host "Running Activation Script in the background..." -ForegroundColor Yellow
+    Run-Command -Command "irm https://get.activated.win | iex"
+}
 
 function Display-SystemInfo {
     Clear-Host
@@ -141,7 +198,7 @@ function KeyPressOption {
         "3" { Start-Process "msedge" -ArgumentList "-inprivate https://en.key-test.ru/" }
         "4" { Start-Process "devmgmt.msc" }
         "5" { Restart-WindowsUpdateAndCleanCache }
-        "6" { Configure-PowerSettings }
+        "6" { Use-ConfigurePowerSettings }
         "7" { Run-ActivationScript }
         "8" { exit }
         default { return }
