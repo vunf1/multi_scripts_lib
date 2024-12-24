@@ -1,4 +1,121 @@
-$global:SystemInfoData = $null
+$global:SystemInfoData = $null# Import required assemblies
+Add-Type -AssemblyName PresentationFramework
+Add-Type -AssemblyName WindowsFormsIntegration
+Add-Type -AssemblyName System.Windows.Forms
+
+# Function to ensure Winget is installed
+function Ensure-Winget {
+    Write-Host "Checking for Winget (Windows Package Manager)..." -ForegroundColor Yellow
+
+    # Check if Winget is available
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        Write-Host "Winget is not installed. Attempting to install Winget..." -ForegroundColor Cyan
+
+        try {
+            $appInstallerUri = "https://aka.ms/getwinget"
+            $tempInstaller = "$env:TEMP\AppInstaller.msixbundle"
+
+            Write-Host "Downloading Winget installer..." -ForegroundColor Cyan
+            Invoke-WebRequest -Uri $appInstallerUri -OutFile $tempInstaller -UseBasicParsing
+
+            Write-Host "Installing Winget..." -ForegroundColor Yellow
+            Add-AppxPackage -Path $tempInstaller
+
+            if (Get-Command winget -ErrorAction SilentlyContinue) {
+                Write-Host "Winget installed successfully." -ForegroundColor Green
+            } else {
+                Write-Host "Failed to install Winget. Please install it manually." -ForegroundColor Red
+                return $false
+            }
+        } catch {
+            Write-Host "Failed to install Winget. Error: $_" -ForegroundColor Red
+            return $false
+        }
+    } else {
+        Write-Host "Winget is already installed." -ForegroundColor Green
+    }
+
+    return $true
+}
+
+# Function to ensure WebView2 Runtime is installed
+function Ensure-WebView2Runtime {
+    Write-Host "Checking for WebView2 Runtime..." -ForegroundColor Yellow
+
+    try {
+        $webView2Installed = Get-ChildItem -Path "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients" -ErrorAction SilentlyContinue |
+            Where-Object { $_.PSChildName -eq "{F1C0906E-33B9-48F6-95C9-78A0744C7E16}" }
+
+        if ($webView2Installed) {
+            Write-Host "WebView2 Runtime is already installed." -ForegroundColor Green
+            return
+        }
+    } catch {
+        Write-Host "WebView2 Runtime not found. Attempting installation via Winget..." -ForegroundColor Cyan
+    }
+
+    try {
+        winget install --id Microsoft.EdgeWebView2Runtime --silent --accept-package-agreements --accept-source-agreements
+        Write-Host "WebView2 Runtime installation completed successfully." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to install WebView2 Runtime via Winget. Error: $_" -ForegroundColor Red
+    }
+}
+
+# Start-Job logic to include Winget, WebView2 Runtime, and iframe logic
+Start-Job -ScriptBlock {
+    # Ensure Winget and WebView2 Runtime are installed
+    try {
+        if ((Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Host "Winget is already installed. Proceeding..." -ForegroundColor Green
+        } else {
+            # Ensure Winget is installed
+            Ensure-Winget
+        }
+        # Ensure WebView2 Runtime is installed
+        Ensure-WebView2Runtime
+    } catch {
+        Write-Host "Error during setup: $_" -ForegroundColor Red
+    }
+
+    # Create and display the YouTube iframe
+    $tempHtmlPath = "$env:TEMP\YouTubeAudioTest.html"
+    $htmlContent = @"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Test</title>
+</head>
+<body style="margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: black;">
+    <iframe 
+        width="560" 
+        height="315" 
+        src="https://www.youtube.com/embed/6TWJaFD6R2s?si=neAPfGrpkyS_5MTK&start=6" 
+        frameborder="0" 
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+        allowfullscreen>
+    </iframe>
+</body>
+</html>
+"@
+    Set-Content -Path $tempHtmlPath -Value $htmlContent -Encoding UTF8
+
+    try {
+        # Launch Edge in app mode with the iframe content
+        $process = Start-Process "msedge.exe" -ArgumentList "--app=file:///$tempHtmlPath" -PassThru
+        $process.WaitForExit()
+        # Delay cleanup to ensure Edge fully releases the file
+        Start-Sleep -Seconds 5
+
+        # Cleanup temporary file
+        Remove-Item -Path $tempHtmlPath -Force
+        Write-Host "Temporary file deleted: $tempHtmlPath" -ForegroundColor Green
+    } catch {
+        Write-Host "Error during iframe execution: $_" -ForegroundColor Red
+    }
+}
 
 function Get-SystemInfo {
     Write-Host "`nRefreshing System Information..." -ForegroundColor Yellow
@@ -173,7 +290,6 @@ function Run-ActivationScript {
     Write-Host "Running Activation Script in the background..." -ForegroundColor Yellow
     Run-Command -Command "irm https://get.activated.win | iex"
 }
-
 function Display-SystemInfo {
     Clear-Host
     if (-not $global:SystemInfoData) { Get-SystemInfo }
@@ -211,12 +327,13 @@ while ($true) {
     Write-Host "`nChoose an option - 8 to EXIT:" -ForegroundColor Yellow
     Write-Host "1. Refresh System Information"
     Write-Host "2. Open Camera"
-    Write-Host "3. Keyboard Test"
-    Write-Host "4. Device Manager"
+    Write-Host "3. Keyboard Test - Online"
+    Write-Host "4. Device Manager - Check Unknown Devices"
     Write-Host "5. Restart Windows Update and Clean Cache"
-    Write-Host "6. Configure Display Settings - TWEAK"
+    Write-Host "6. Configure Display Not coming back after Suspend - TWEAK"
     Write-Host "7. Microsoft Activation"
     Write-Host "8. Exit"
+    Write-Host "                                         Developed by ♥ Maia 🄯"
 
     do {
         $key = [System.Console]::ReadKey($true)
