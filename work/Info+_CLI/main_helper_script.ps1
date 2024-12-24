@@ -416,3 +416,4 @@ while ($true) {
 
     KeyPressOption $key
 }
+# Get-WinEvent -LogName System | Where-Object { $_.ProviderName -eq "Microsoft-Windows-MemoryDiagnostics-Results" } | Select-Object TimeCreated, Message
