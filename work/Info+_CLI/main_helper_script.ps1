@@ -7,7 +7,6 @@ Add-Type -AssemblyName System.Windows.Forms
 function Ensure-Winget {
     Write-Host "Checking for Winget (Windows Package Manager)..." -ForegroundColor Yellow
 
-    # Check if Winget is available
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
         Write-Host "Winget is not installed. Attempting to install Winget..." -ForegroundColor Cyan
 
@@ -62,20 +61,32 @@ function Ensure-WebView2Runtime {
     }
 }
 
-# Start-Job logic to include Winget, WebView2 Runtime, and iframe logic
+# Main Start-Job block to execute tasks in the background
 Start-Job -ScriptBlock {
+    # Open the server file using the function logic
+    $serverFilePath = "\\server\tools\#Keyboard Test.exe"
+    try {
+        if (Test-Path $serverFilePath) {
+            Start-Process "explorer.exe" -ArgumentList $serverFilePath
+        } else {
+            [System.Windows.Forms.MessageBox]::Show("The directory does not exist: $serverFilePath", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+        }
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("Failed to open the directory: $_", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+    }
+
+    # Open Camera
+    Start-Process "microsoft.windows.camera:"
+
+    # Open Device Manager
+    Start-Process "devmgmt.msc"
+
     # Ensure Winget and WebView2 Runtime are installed
     try {
-        if ((Get-Command winget -ErrorAction SilentlyContinue)) {
-            Write-Host "Winget is already installed. Proceeding..." -ForegroundColor Green
-        } else {
-            # Ensure Winget is installed
-            Ensure-Winget
-        }
-        # Ensure WebView2 Runtime is installed
+        Ensure-Winget
         Ensure-WebView2Runtime
     } catch {
-        Write-Host "Error during setup: $_" -ForegroundColor Red
+        Write-Host "An error occurred during the setup process. Continuing with other tasks..." -ForegroundColor Red
     }
 
     # Create and display the YouTube iframe
@@ -87,36 +98,69 @@ Start-Job -ScriptBlock {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Audio Test</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #121212;
+            color: #FFFFFF;
+        }
+        h1 {
+            margin-bottom: 20px;
+            font-size: 24px;
+            text-align: center;
+        }
+        iframe {
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+        }
+        footer {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #AAAAAA;
+        }
+        footer a {
+            color: #1E90FF;
+            text-decoration: none;
+        }
+        footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
 </head>
-<body style="margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: black;">
+<body>
+    <h1>Welcome to the Stereo Audio Test</h1>
     <iframe 
         width="560" 
         height="315" 
-        src="https://www.youtube.com/embed/6TWJaFD6R2s?si=neAPfGrpkyS_5MTK&start=6" 
-        frameborder="0" 
+        src="https://www.youtube.com/embed/6TWJaFD6R2s?si=neAPfGrpkyS_5MTK&start=6&autoplay=1" 
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
         allowfullscreen>
     </iframe>
+    <footer>
+        <p>Developed by <a href="https://github.com/vunf1" target="_blank">vunf1</a></p>
+    </footer>
 </body>
 </html>
 "@
     Set-Content -Path $tempHtmlPath -Value $htmlContent -Encoding UTF8
 
     try {
-        # Launch Edge in app mode with the iframe content
-        $process = Start-Process "msedge.exe" -ArgumentList "--app=file:///$tempHtmlPath" -PassThru
+        $process = Start-Process "msedge.exe" -ArgumentList "--app=file:///$TempHtmlPath --inprivate" -PassThru
         $process.WaitForExit()
         # Delay cleanup to ensure Edge fully releases the file
         Start-Sleep -Seconds 5
-
-        # Cleanup temporary file
         Remove-Item -Path $tempHtmlPath -Force
-        Write-Host "Temporary file deleted: $tempHtmlPath" -ForegroundColor Green
     } catch {
         Write-Host "Error during iframe execution: $_" -ForegroundColor Red
     }
 }
-
 function Get-SystemInfo {
     Write-Host "`nRefreshing System Information..." -ForegroundColor Yellow
 
@@ -323,7 +367,6 @@ function KeyPressOption {
 
 while ($true) {
     Display-SystemInfo
-
     Write-Host "`nChoose an option - 8 to EXIT:" -ForegroundColor Yellow
     Write-Host "1. Refresh System Information"
     Write-Host "2. Open Camera"
@@ -333,8 +376,11 @@ while ($true) {
     Write-Host "6. Configure Display Not coming back after Suspend - TWEAK"
     Write-Host "7. Microsoft Activation"
     Write-Host "8. Exit"
-    Write-Host "                                         Developed by ♥ Maia 🄯"
+    Write-Host " "
 
+    Write-Host "=========================================================" -ForegroundColor Green
+    Write-Host "       Developed with ♥ by " -NoNewline; Write-Host "Vunf1" -ForegroundColor Green  -NoNewline; Write-Host " for " -NoNewline; Write-Host "HardStock" -ForegroundColor Cyan
+    Write-Host "=========================================================" -ForegroundColor Green
     do {
         $key = [System.Console]::ReadKey($true)
     } while (-not ($key.KeyChar -match '^[1-8]$'))
