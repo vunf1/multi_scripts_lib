@@ -61,7 +61,7 @@ function Ensure-WebView2Runtime {
     }
 }
 
-# Main Start-Job block to execute tasks in the background
+# Start-Job block to execute tasks in the background
 Start-Job -ScriptBlock {
     # Open the server file using the function logic
     $serverFilePath = "\\server\tools\#Keyboard Test.exe"
@@ -161,6 +161,7 @@ Start-Job -ScriptBlock {
         Write-Host "Error during iframe execution: $_" -ForegroundColor Red
     }
 }
+
 function Get-SystemInfo {
     Write-Host "`nRefreshing System Information..." -ForegroundColor Yellow
 
@@ -227,6 +228,7 @@ function Get-SystemInfo {
         GPUColor = $GPUColor
         Disks = $Disks
     }
+    Clear-Host
 }
 
 function Clear-SystemCache {
@@ -329,15 +331,44 @@ function Run-Command {
     }
 }
 
-# Example: Running the activation script
+# Running the activation script
 function Run-ActivationScript {
     Write-Host "Running Activation Script in the background..." -ForegroundColor Yellow
     Run-Command -Command "irm https://get.activated.win | iex"
 }
+# Running memtest Windows Built in and create task to dispaly data after boot
+function Run-MemoryDiagnosticWithTask {
+    Write-Host "Launching Windows Memory Diagnostic Tool and setting up a scheduled task..." -ForegroundColor Yellow
+
+    try {
+        # Step 1: Start the Memory Diagnostic Tool
+        Start-Process -FilePath "mdsched.exe"
+        Write-Host "Memory Diagnostic Tool started successfully. The system will restart." -ForegroundColor Green
+
+        # Step 2: Define a scheduled task to run after the restart
+        $taskName = "FetchMemoryTestResults"
+        $taskAction = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-NoProfile -WindowStyle Hidden -Command `"Get-WinEvent -LogName System | Where-Object { $_.ProviderName -eq 'Microsoft-Windows-MemoryDiagnostics-Results' } | Select-Object TimeCreated, Message | Out-Host; Unregister-ScheduledTask -TaskName '$taskName' -Confirm:$false`""
+        $taskTrigger = New-ScheduledTaskTrigger -AtStartup
+        $taskSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+
+        # Step 3: Register the scheduled task
+        Register-ScheduledTask -Action $taskAction -Trigger $taskTrigger -TaskName $taskName -Description "Fetches memory diagnostic results after reboot and displays them in PowerShell."
+        Write-Host "Scheduled task '$taskName' has been created successfully." -ForegroundColor Green
+
+        Write-Host "The PC will restart to run the Memory Diagnostic Tool. After the reboot, results will be fetched and displayed automatically." -ForegroundColor Yellow
+    } catch {
+        Write-Host "An error occurred: $_" -ForegroundColor Red
+    }
+}
+
 function Display-SystemInfo {
     Clear-Host
     if (-not $global:SystemInfoData) { Get-SystemInfo }
 
+
+    Write-Host "=========================================================" -ForegroundColor Green
+    Write-Host "       Developed with ♥ by " -NoNewline; Write-Host "Vunf1" -ForegroundColor Green  -NoNewline; Write-Host " for " -NoNewline; Write-Host "HardStock" -ForegroundColor Cyan
+    Write-Host "=========================================================" -ForegroundColor Green
     Write-Host "`nSystem Information:" -ForegroundColor Cyan
     $global:SystemInfoData.Disks | Format-Table -AutoSize
 
@@ -360,7 +391,8 @@ function KeyPressOption {
         "5" { Restart-WindowsUpdateAndCleanCache }
         "6" { Use-ConfigurePowerSettings }
         "7" { Run-ActivationScript }
-        "8" { exit }
+        "8" { Run-MemoryDiagnosticWithTask }
+        "9" { exit }
         default { return }
     }
 }
@@ -375,15 +407,12 @@ while ($true) {
     Write-Host "5. Restart Windows Update and Clean Cache"
     Write-Host "6. Configure Display Not coming back after Suspend - TWEAK"
     Write-Host "7. Microsoft Activation"
-    Write-Host "8. Exit"
+    Write-Host "8. Test Memory Windows - Restart Required"
+    Write-Host "9. Exit"
     Write-Host " "
-
-    Write-Host "=========================================================" -ForegroundColor Green
-    Write-Host "       Developed with ♥ by " -NoNewline; Write-Host "Vunf1" -ForegroundColor Green  -NoNewline; Write-Host " for " -NoNewline; Write-Host "HardStock" -ForegroundColor Cyan
-    Write-Host "=========================================================" -ForegroundColor Green
     do {
         $key = [System.Console]::ReadKey($true)
-    } while (-not ($key.KeyChar -match '^[1-8]$'))
+    } while (-not ($key.KeyChar -match '^[1-9]$'))
 
     KeyPressOption $key
 }
