@@ -3,28 +3,42 @@ Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName WindowsFormsIntegration
 Add-Type -AssemblyName System.Windows.Forms
 
-# Function to ensure Winget is installed
 # Start-Job block to execute tasks in the background
-Start-Job -ScriptBlock {
-    # Function to ensure Winget is installed    
+Start-Job -ScriptBlock {   
+    
+    function Show-MessageBox {
+        param (
+            [string]$Message,
+            [string]$Title = "Notification",
+            [ValidateSet("Information", "Warning", "Error", "Critical")]
+            [string]$Type = "Information"
+        )
+        # Map the Type to MessageBoxIcon
+        $Icon = switch ($Type) {
+            "Information" { [System.Windows.Forms.MessageBoxIcon]::Information }
+            "Warning" { [System.Windows.Forms.MessageBoxIcon]::Warning }
+            "Error" { [System.Windows.Forms.MessageBoxIcon]::Error }
+            "Critical" { [System.Windows.Forms.MessageBoxIcon]::Error }
+        }
+        [System.Windows.Forms.MessageBox]::Show($Message, $Title, [System.Windows.Forms.MessageBoxButtons]::OK, $Icon)
+    }
     function Start-Executable {
         param (
             [string]$FilePath,
             [string]$DisplayName
         )
-
+    
         try {
             if (Test-Path $FilePath) {
                 Start-Process "explorer.exe" -ArgumentList $FilePath
-                Write-Host "Launched: $DisplayName" -ForegroundColor Green
+                Show-MessageBox -Message "Launched: $DisplayName" -Title "Success" -Type "Information"
             } else {
-                Write-Host "File not found: $FilePath" -ForegroundColor Red
+                Show-MessageBox -Message "File not found: $FilePath" -Title "Error" -Type "Error"
             }
         } catch {
-            Write-Host "Error launching ${DisplayName}: $_" -ForegroundColor Red
+            Show-MessageBox -Message "Error launching ${DisplayName}: $_" -Title "Critical Error" -Type "Critical"
         }
     }
-
     function Install-Winget {
         Write-Host "Checking for Winget..." -ForegroundColor Yellow
         if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
@@ -150,7 +164,7 @@ Start-Job -ScriptBlock {
         $process = Start-Process "msedge.exe" -ArgumentList "--app=file:///$TempHtmlPath --inprivate" -PassThru
     
         # Wait for the process to start
-        Start-Sleep -Seconds 2
+        Start-Sleep -Seconds 3
     
         # Resize and reposition the Edge window using Windows API
         Add-Type @"
@@ -521,18 +535,130 @@ function Show-SystemInfo {
     Write-Host "| Activation Status          |" -NoNewline; Write-Host " $($data.ActivationStatus)" -ForegroundColor $data.ActivationColor
     Write-Host "+----------------------------+-----------------------------+"
 }
+function Show-DriverPage {
+    # Define links, their URLs, and associated icon URLs
+    $links = @(
+        @{ Text = "INTEL"; URL = "https://www.intel.com.br/content/www/br/pt/support/detect.html"; IconURL = "https://cdn.worldvectorlogo.com/logos/intel.svg" },
+        @{ Text = "AMD"; URL = "https://www.amd.com/pt/support/download/drivers.html"; IconURL = "https://cdn.worldvectorlogo.com/logos/amd-logo-1.svg" },
+        @{ Text = "NVIDIA"; URL = "https://www.nvidia.com/pt-br/software/nvidia-app/"; IconURL = "https://cdn.worldvectorlogo.com/logos/nvidia.svg" },
+        @{ Text = "HP"; URL = "https://support.hp.com/pt-pt/drivers/laptops"; IconURL = "https://cdn.worldvectorlogo.com/logos/hp-5.svg" },
+        @{ Text = "DELL"; URL = "https://www.dell.com/support/home/pt-pt?app=drivers&lwp=rt"; IconURL = "https://cdn.worldvectorlogo.com/logos/dell-2.svg" },
+        @{ Text = "LENOVO"; URL = "https://support.lenovo.com/pt/pt/solutions/ht003029-lenovo-system-update-update-drivers-bios-and-applications"; IconURL = "https://cdn.worldvectorlogo.com/logos/lenovo-2.svg" },
+        @{ Text = "FUJITSU"; URL = "https://support.ts.fujitsu.com/Deskupdate/index.asp?lng=pt"; IconURL = "https://cdn.worldvectorlogo.com/logos/fujitsu-2.svg" },
+        @{ Text = "SURFACE"; URL = "https://www.microsoft.com/store/productId/9WZDNCRFJB8P"; IconURL = "https://cdn.worldvectorlogo.com/logos/microsoft-5.svg" }
+    )
+    
+    # Generate dynamic HTML content
+    $htmlContent = @"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="https://www.svgrepo.com/show/420913/computer-cpu-hardware-2.svg" type="image/svg">
+    
+    <title>DRIVERS LINKS</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: rgb(77, 77, 77);
+            margin: 0;
+            display: flex;
+            flex-direction: column; /* Arrange items vertically */
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh; /* Ensure the body fills the viewport height */
+        }
+        .content {
+            text-align: center;
+        }
+            
+        .links {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr); /* 3 columns */
+            gap: 20px; /* Space between grid items */
+            width: 80%; /* Optional: Adjust as needed for layout */
+            margin: 0 auto; /* Center the grid horizontally */
+        }
+            
+        .link-item {
+            text-align: center;
+        }
+        .link-item img {
+            width: calc(64px * 1.25); /* Slightly increased size */
+            height: calc(64px * 1.25);
+            margin-bottom: 10px; /* Space between image and text */
+        }
+        .link-item a {
+            display: block; /* Ensures text is below the image */
+            font-size: calc(18px * 1.25);
+            text-decoration: none;
+            color: rgb(255, 255, 255);
+        }
+        .link-item a:hover {
+            text-decoration: underline;
+        }
+        h1, h4 {
+            margin: 0 0 20px;
+            color: rgb(255, 255, 255);
+        }
+    </style>
+</head>
+<body>
+    <section class="content">
+        <h1>Please Accept All Cookies</h1>
+    </section>
+    <section class="links">
+"@
 
+    # Append link entries dynamically
+    foreach ($link in $links) {
+        $htmlContent += @"
+        <section class="link-item">
+        <a href="$($link.URL)" target="_blank">
+            <img src="$($link.IconURL)" alt="$($link.Text) Logo">
+        </a>
+        <a href="$($link.URL)" target="_blank">$($link.Text)</a>
+        </section>
+"@
+    }
+
+    # Close HTML tags
+    $htmlContent += @"
+    </section>
+    <footer>
+    <p>Developed by <a href="https://github.com/vunf1" target="_blank">vunf1</a></p>
+    </footer>
+</body>
+</html>
+"@
+
+
+    # Save HTML to a temp file
+    $tempHtmlPath = "$env:TEMP\DriversLinks.html"
+    Set-Content -Path $tempHtmlPath -Value $htmlContent -Encoding UTF8
+
+    # Launch Edge and manipulate its window
+    try {
+        # Launch Edge with the specified page
+        Start-Process "msedge.exe" -ArgumentList "--app=file:///$tempHtmlPath --inprivate"
+        # Wait for the process to start
+        Start-Sleep -Seconds 3
+        Remove-Item -Path $tempHtmlPath -Force
+    } catch {
+        Write-Host "Error during Edge manipulation: $_" -ForegroundColor Red
+    }
+}
 function KeyPressOption {
     param ([ConsoleKeyInfo]$Key)
     switch ($Key.KeyChar) {
         "1" { Get-SystemInfo; Show-SystemInfo }
-        "2" { Start-Process "microsoft.windows.camera:" }
+        "2" { Show-DriverPage }
         "3" { Start-Process "msedge" -ArgumentList "-inprivate https://en.key-test.ru/" }
-        "4" { Start-Process "devmgmt.msc" }
-        "5" { Restart-WindowsUpdateAndCleanCache }
-        "6" { Use-ConfigurePowerSettings }
-        "7" { Start-ActivationScript }
-        "8" { Start-MemoryDiagnosticWithTask }
+        "4" { Restart-WindowsUpdateAndCleanCache }
+        "5" { Use-ConfigurePowerSettings }
+        "6" { Start-ActivationScript }
+        "7" { Start-MemoryDiagnosticWithTask }
         "0" { exit }
         default { return }
     }
@@ -542,18 +668,17 @@ while ($true) {
     Show-SystemInfo
     Write-Host "`nChoose an option - 8 to EXIT:" -ForegroundColor Yellow
     Write-Host "1. Refresh System Information"
-    Write-Host "2. Open Camera"
+    Write-Host "2. Drivers Links"
     Write-Host "3. Keyboard Test - Online"
-    Write-Host "4. Device Manager - Check Unknown Devices"
-    Write-Host "5. Restart Windows Update and Clean Cache"
-    Write-Host "6. TWEAK - Display Not coming back after Suspend "
-    Write-Host "7. Microsoft Activation"
-    Write-Host "8. Test Memory Windows - Restart Required"
+    Write-Host "4. Restart Windows Update and Clean Cache"
+    Write-Host "5. TWEAK - Display Not coming back when Suspended "
+    Write-Host "6. Microsoft Activation Helper"
+    Write-Host "7. Test Memory Windows - Restart Required"
     Write-Host "0. Exit"
     Write-Host " "
     do {
         $key = [System.Console]::ReadKey($true)
-    } while (-not ($key.KeyChar -match '^[0-8]$'))
+    } while (-not ($key.KeyChar -match '^[0-7]$'))
 
     KeyPressOption $key
 }
