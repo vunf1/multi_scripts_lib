@@ -4,7 +4,7 @@ Add-Type -AssemblyName WindowsFormsIntegration
 Add-Type -AssemblyName System.Windows.Forms
 
 # Function to ensure Winget is installed
-function Ensure-Winget {
+function Install-Winget {
     Write-Host "Checking for Winget (Windows Package Manager)..." -ForegroundColor Yellow
 
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
@@ -12,7 +12,13 @@ function Ensure-Winget {
 
         try {
             $appInstallerUri = "https://aka.ms/getwinget"
-            $tempInstaller = "$env:TEMP\AppInstaller.msixbundle"
+            $tempInstaller = "$env:TEMP\AppInstaller.msixbundle" # Default name 
+
+            # Remove any existing AppInstaller.msixbundle in TEMP folder
+            if (Test-Path $tempInstaller) {
+                Write-Host "Removing existing installer file in TEMP folder..." -ForegroundColor Cyan
+                Remove-Item -Path $tempInstaller -Force
+            }
 
             Write-Host "Downloading Winget installer..." -ForegroundColor Cyan
             Invoke-WebRequest -Uri $appInstallerUri -OutFile $tempInstaller -UseBasicParsing
@@ -38,7 +44,7 @@ function Ensure-Winget {
 }
 
 # Function to ensure WebView2 Runtime is installed
-function Ensure-WebView2Runtime {
+function Install-WebView2Runtime {
     Write-Host "Checking for WebView2 Runtime..." -ForegroundColor Yellow
 
     try {
@@ -61,20 +67,46 @@ function Ensure-WebView2Runtime {
     }
 }
 
-# Start-Job block to execute tasks in the background
-Start-Job -ScriptBlock {
-    # Open the server file using the function logic
-    $serverFilePath = "\\server\tools\#Keyboard Test.exe"
+function Start-Executable {
+    param (
+        [string]$FilePath,
+        [string]$DisplayName
+    )
+
     try {
-        if (Test-Path $serverFilePath) {
-            Start-Process "explorer.exe" -ArgumentList $serverFilePath
+        if (Test-Path $FilePath) {
+            Start-Process "explorer.exe" -ArgumentList $FilePath
         } else {
-            [System.Windows.Forms.MessageBox]::Show("The directory does not exist: $serverFilePath", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+            [System.Windows.Forms.MessageBox]::Show(
+                "The file does not exist: $FilePath",
+                "Error: $DisplayName",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Error
+            )
         }
     } catch {
-        [System.Windows.Forms.MessageBox]::Show("Failed to open the directory: $_", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+        [System.Windows.Forms.MessageBox]::Show(
+            "An error occurred while attempting to open ${DisplayName}: $_",
+            "Error",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Error
+        )
     }
+}
 
+# Start-Job block to execute tasks in the background
+Start-Job -ScriptBlock {
+
+    $executables = @{
+        "Keyboard Test"      = "\\server\tools\#Keyboard Test.exe"
+        "Battery Info View"  = "\\server\tools\Tools\batteryinfoview\BatteryInfoView.exe"
+        "BlueScreen View"    = "\\server\tools\Tools\BlueScreen View\BlueScreenView.exe"
+    }
+    
+    # Iterate through the executables and attempt to launch each
+    foreach ($name in $executables.Keys) {
+        Start-Executable -FilePath ${executables[$name]} -DisplayName $name
+    }
     # Open Camera
     Start-Process "microsoft.windows.camera:"
 
@@ -98,7 +130,7 @@ Start-Job -ScriptBlock {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Audio Test</title>
-    <style>
+<style>
         body {
             margin: 0;
             font-family: Arial, sans-serif;
@@ -110,12 +142,9 @@ Start-Job -ScriptBlock {
             background-color: #121212;
             color: #FFFFFF;
         }
-        h1 {
-            margin-bottom: 20px;
-            font-size: 24px;
-            text-align: center;
-        }
         iframe {
+            width: 90vw; /* 90% of the viewport width */
+            height: 90vh; /* 90% of the viewport height */
             border: none;
             border-radius: 8px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
@@ -135,10 +164,7 @@ Start-Job -ScriptBlock {
     </style>
 </head>
 <body>
-    <h1>Welcome to the Stereo Audio Test</h1>
-    <iframe 
-        width="560" 
-        height="315" 
+    <iframe
         src="https://www.youtube.com/embed/6TWJaFD6R2s?si=neAPfGrpkyS_5MTK&start=6&autoplay=1" 
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
         allowfullscreen>
@@ -150,10 +176,62 @@ Start-Job -ScriptBlock {
 </html>
 "@
     Set-Content -Path $tempHtmlPath -Value $htmlContent -Encoding UTF8
-
     try {
+        # Launch Edge with the specified page
         $process = Start-Process "msedge.exe" -ArgumentList "--app=file:///$TempHtmlPath --inprivate" -PassThru
+    
+        # Wait for the process to start
+        Start-Sleep -Seconds 2
+    
+        # Resize and reposition the Edge window using Windows API
+        Add-Type @"
+    using System;
+    using System.Runtime.InteropServices;
+    
+    public class WindowHelper {
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetWindowRect(IntPtr hWnd, ref RECT lpRect);
+    
+        [DllImport("user32.dll")]
+        public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
+    
+        [StructLayout(LayoutKind.Sequential)]
+        public struct RECT {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+    
+        public static RECT GetWindowRect(IntPtr hWnd) {
+            RECT rect = new RECT();
+            GetWindowRect(hWnd, ref rect);
+            return rect;
+        }
+    }
+"@
+    
+        # Get the process address for the Edge window
+        $processHandle = (Get-Process -Id $process.Id).MainWindowHandle
+    
+        # Get screen dimensions
+        $screenWidth = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width
+        $screenHeight = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height
+    
+        # Calculate window dimensions for 1/4 of the screen
+        $windowWidth = [math]::Floor($screenWidth / 2)
+        $windowHeight = [math]::Floor($screenHeight / 2)
+
+        # Position the window to the top-right corner
+        $posX = $screenWidth - $windowWidth
+        $posY = 0
+        # Move and resize the window to the top-left corner (or another position if desired)
+        [WindowHelper]::MoveWindow($processHandle, $posX, $posY, $windowWidth, $windowHeight, $true)
+    
+        # Wait for Edge process to exit
         $process.WaitForExit()
+    
         # Delay cleanup to ensure Edge fully releases the file
         Start-Sleep -Seconds 5
         Remove-Item -Path $tempHtmlPath -Force
@@ -316,7 +394,7 @@ function Use-ConfigurePowerSettings {
 }
 
 # Function to run a specified command
-function Run-Command {
+function Start-Command {
     param (
         [Parameter(Mandatory = $true)]
         [string]$Command
@@ -332,12 +410,12 @@ function Run-Command {
 }
 
 # Running the activation script
-function Run-ActivationScript {
+function Start-ActivationScript {
     Write-Host "Running Activation Script in the background..." -ForegroundColor Yellow
     Run-Command -Command "irm https://get.activated.win | iex"
 }
 # Running memtest Windows Built in and create task to dispaly data after boot
-function Run-MemoryDiagnosticWithTask {
+function Start-MemoryDiagnosticWithTask {
     Write-Host "Launching Windows Memory Diagnostic Tool and setting up a scheduled task..." -ForegroundColor Yellow
 
     try {
@@ -352,7 +430,7 @@ function Run-MemoryDiagnosticWithTask {
         $taskSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
 
         # Step 3: Register the scheduled task
-        Register-ScheduledTask -Action $taskAction -Trigger $taskTrigger -TaskName $taskName -Description "Fetches memory diagnostic results after reboot and displays them in PowerShell."
+        Register-ScheduledTask -Action $taskAction -Trigger $taskTrigger -TaskName $taskName -Settings $taskSettings -Description "Fetches memory diagnostic results after reboot and displays them in PowerShell."
         Write-Host "Scheduled task '$taskName' has been created successfully." -ForegroundColor Green
 
         Write-Host "The PC will restart to run the Memory Diagnostic Tool. After the reboot, results will be fetched and displayed automatically." -ForegroundColor Yellow
@@ -361,58 +439,61 @@ function Run-MemoryDiagnosticWithTask {
     }
 }
 
-function Display-SystemInfo {
+function Show-SystemInfo {
     Clear-Host
-    if (-not $global:SystemInfoData) { Get-SystemInfo }
+    if (-not $global:SystemInfoData) { 
+        Get-SystemInfo 
+    }
 
-
+    # Explicitly reference $global:SystemInfoData
+    $data = $global:SystemInfoData
     Write-Host "=========================================================" -ForegroundColor Green
     Write-Host "       Developed with ♥ by " -NoNewline; Write-Host "Vunf1" -ForegroundColor Green  -NoNewline; Write-Host " for " -NoNewline; Write-Host "HardStock" -ForegroundColor Cyan
     Write-Host "=========================================================" -ForegroundColor Green
     Write-Host "`nSystem Information:" -ForegroundColor Cyan
-    $global:SystemInfoData.Disks | Format-Table -AutoSize
+    $data.Disks | Format-Table -AutoSize
 
     Write-Host "+----------------------------+-----------------------------+"
-    Write-Host "| Total Physical Memory      | $($global:SystemInfoData.MemoryInfo) GB            "
-    Write-Host "| CPU                        |" -NoNewline; Write-Host " $($global:SystemInfoData.CPUInfo)" -ForegroundColor $global:SystemInfoData.CPUColor
-    Write-Host "| GPU                        |" -NoNewline; Write-Host " $($global:SystemInfoData.GPUInfo)" -ForegroundColor $global:SystemInfoData.GPUColor
-    Write-Host "| Windows Version            | $($global:SystemInfoData.WindowsStatus)           "
-    Write-Host "| Activation Status          |" -NoNewline; Write-Host " $($global:SystemInfoData.ActivationStatus)" -ForegroundColor $global:SystemInfoData.ActivationColor
+    Write-Host "| Total Physical Memory      | $($data.MemoryInfo) GB            "
+    Write-Host "| CPU                        |" -NoNewline; Write-Host " $($data.CPUInfo)" -ForegroundColor $data.CPUColor
+    Write-Host "| GPU                        |" -NoNewline; Write-Host " $($data.GPUInfo)" -ForegroundColor $data.GPUColor
+    Write-Host "| Windows Version            | $($data.WindowsStatus)           "
+    Write-Host "| Activation Status          |" -NoNewline; Write-Host " $($data.ActivationStatus)" -ForegroundColor $data.ActivationColor
     Write-Host "+----------------------------+-----------------------------+"
 }
 
 function KeyPressOption {
     param ([ConsoleKeyInfo]$Key)
     switch ($Key.KeyChar) {
-        "1" { Get-SystemInfo; Display-SystemInfo }
+        "1" { Get-SystemInfo; Show-SystemInfo }
         "2" { Start-Process "microsoft.windows.camera:" }
         "3" { Start-Process "msedge" -ArgumentList "-inprivate https://en.key-test.ru/" }
         "4" { Start-Process "devmgmt.msc" }
         "5" { Restart-WindowsUpdateAndCleanCache }
         "6" { Use-ConfigurePowerSettings }
-        "7" { Run-ActivationScript }
-        "8" { Run-MemoryDiagnosticWithTask }
-        "9" { exit }
+        "7" { Start-ActivationScript }
+        "8" { Start-MemoryDiagnosticWithTask }
+        "0" { exit }
         default { return }
     }
 }
 
 while ($true) {
-    Display-SystemInfo
+    Show-SystemInfo
     Write-Host "`nChoose an option - 8 to EXIT:" -ForegroundColor Yellow
     Write-Host "1. Refresh System Information"
     Write-Host "2. Open Camera"
     Write-Host "3. Keyboard Test - Online"
     Write-Host "4. Device Manager - Check Unknown Devices"
     Write-Host "5. Restart Windows Update and Clean Cache"
-    Write-Host "6. Configure Display Not coming back after Suspend - TWEAK"
+    Write-Host "6. TWEAK - Display Not coming back after Suspend "
     Write-Host "7. Microsoft Activation"
     Write-Host "8. Test Memory Windows - Restart Required"
-    Write-Host "9. Exit"
+    Write-Host "0. Exit"
     Write-Host " "
     do {
         $key = [System.Console]::ReadKey($true)
-    } while (-not ($key.KeyChar -match '^[1-9]$'))
+    } while (-not ($key.KeyChar -match '^[0-8]$'))
 
     KeyPressOption $key
 }
