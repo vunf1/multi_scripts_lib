@@ -4,109 +4,84 @@ Add-Type -AssemblyName WindowsFormsIntegration
 Add-Type -AssemblyName System.Windows.Forms
 
 # Function to ensure Winget is installed
-function Install-Winget {
-    Write-Host "Checking for Winget (Windows Package Manager)..." -ForegroundColor Yellow
-
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-        Write-Host "Winget is not installed. Attempting to install Winget..." -ForegroundColor Cyan
-
-        try {
-            $appInstallerUri = "https://aka.ms/getwinget"
-            $tempInstaller = "$env:TEMP\AppInstaller.msixbundle" # Default name 
-
-            # Remove any existing AppInstaller.msixbundle in TEMP folder
-            if (Test-Path $tempInstaller) {
-                Write-Host "Removing existing installer file in TEMP folder..." -ForegroundColor Cyan
-                Remove-Item -Path $tempInstaller -Force
-            }
-
-            Write-Host "Downloading Winget installer..." -ForegroundColor Cyan
-            Invoke-WebRequest -Uri $appInstallerUri -OutFile $tempInstaller -UseBasicParsing
-
-            Write-Host "Installing Winget..." -ForegroundColor Yellow
-            Add-AppxPackage -Path $tempInstaller
-
-            if (Get-Command winget -ErrorAction SilentlyContinue) {
-                Write-Host "Winget installed successfully." -ForegroundColor Green
-            } else {
-                Write-Host "Failed to install Winget. Please install it manually." -ForegroundColor Red
-                return $false
-            }
-        } catch {
-            Write-Host "Failed to install Winget. Error: $_" -ForegroundColor Red
-            return $false
-        }
-    } else {
-        Write-Host "Winget is already installed." -ForegroundColor Green
-    }
-
-    return $true
-}
-
-# Function to ensure WebView2 Runtime is installed
-function Install-WebView2Runtime {
-    Write-Host "Checking for WebView2 Runtime..." -ForegroundColor Yellow
-
-    try {
-        $webView2Installed = Get-ChildItem -Path "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients" -ErrorAction SilentlyContinue |
-            Where-Object { $_.PSChildName -eq "{F1C0906E-33B9-48F6-95C9-78A0744C7E16}" }
-
-        if ($webView2Installed) {
-            Write-Host "WebView2 Runtime is already installed." -ForegroundColor Green
-            return
-        }
-    } catch {
-        Write-Host "WebView2 Runtime not found. Attempting installation via Winget..." -ForegroundColor Cyan
-    }
-
-    try {
-        winget install --id Microsoft.EdgeWebView2Runtime --silent --accept-package-agreements --accept-source-agreements
-        Write-Host "WebView2 Runtime installation completed successfully." -ForegroundColor Green
-    } catch {
-        Write-Host "Failed to install WebView2 Runtime via Winget. Error: $_" -ForegroundColor Red
-    }
-}
-
-function Start-Executable {
-    param (
-        [string]$FilePath,
-        [string]$DisplayName
-    )
-
-    try {
-        if (Test-Path $FilePath) {
-            Start-Process "explorer.exe" -ArgumentList $FilePath
-        } else {
-            [System.Windows.Forms.MessageBox]::Show(
-                "The file does not exist: $FilePath",
-                "Error: $DisplayName",
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Error
-            )
-        }
-    } catch {
-        [System.Windows.Forms.MessageBox]::Show(
-            "An error occurred while attempting to open ${DisplayName}: $_",
-            "Error",
-            [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Error
-        )
-    }
-}
-
 # Start-Job block to execute tasks in the background
 Start-Job -ScriptBlock {
+    # Function to ensure Winget is installed    
+    function Start-Executable {
+        param (
+            [string]$FilePath,
+            [string]$DisplayName
+        )
 
+        try {
+            if (Test-Path $FilePath) {
+                Start-Process "explorer.exe" -ArgumentList $FilePath
+                Write-Host "Launched: $DisplayName" -ForegroundColor Green
+            } else {
+                Write-Host "File not found: $FilePath" -ForegroundColor Red
+            }
+        } catch {
+            Write-Host "Error launching ${DisplayName}: $_" -ForegroundColor Red
+        }
+    }
+
+    function Install-Winget {
+        Write-Host "Checking for Winget..." -ForegroundColor Yellow
+        if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Host "Winget is not installed. Installing..." -ForegroundColor Cyan
+            try {
+                $appInstallerUri = "https://aka.ms/getwinget"
+                $tempInstaller = "$env:TEMP\AppInstaller.msixbundle"
+                if (Test-Path $tempInstaller) { Remove-Item -Path $tempInstaller -Force }
+                Invoke-WebRequest -Uri $appInstallerUri -OutFile $tempInstaller -UseBasicParsing
+                Add-AppxPackage -Path $tempInstaller
+                if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+                    Write-Host "Failed to install Winget." -ForegroundColor Red
+                    return $false
+                }
+                Write-Host "Winget installed successfully." -ForegroundColor Green
+            } catch {
+                Write-Host "Error installing Winget: $_" -ForegroundColor Red
+                return $false
+            }
+        } else {
+            Write-Host "Winget is already installed." -ForegroundColor Green
+        }
+        return $true
+    }
+
+    function Install-WebView2Runtime {
+        Write-Host "Checking for WebView2 Runtime..." -ForegroundColor Yellow
+        try {
+            $webView2Installed = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F1C0906E-33B9-48F6-95C9-78A0744C7E16}" -ErrorAction SilentlyContinue
+            if ($webView2Installed) {
+                Write-Host "WebView2 Runtime is already installed." -ForegroundColor Green
+                return $true
+            }
+        } catch {
+            Write-Host "Error checking WebView2 Runtime: $_" -ForegroundColor Cyan
+        }
+        try {
+            winget install --id Microsoft.EdgeWebView2Runtime --silent --accept-package-agreements --accept-source-agreements
+            Write-Host "WebView2 Runtime installed successfully." -ForegroundColor Green
+        } catch {
+            Write-Host "Error installing WebView2 Runtime: $_" -ForegroundColor Red
+            return $false
+        }
+        return $true
+    }
+
+    # Task execution
     $executables = @{
         "Keyboard Test"      = "\\server\tools\#Keyboard Test.exe"
         "Battery Info View"  = "\\server\tools\Tools\batteryinfoview\BatteryInfoView.exe"
         "BlueScreen View"    = "\\server\tools\Tools\BlueScreen View\BlueScreenView.exe"
     }
-    
-    # Iterate through the executables and attempt to launch each
+
     foreach ($name in $executables.Keys) {
-        Start-Executable -FilePath ${executables[$name]} -DisplayName $name
+        Start-Executable -FilePath $executables[$name] -DisplayName $name
     }
+
     # Open Camera
     Start-Process "microsoft.windows.camera:"
 
@@ -115,8 +90,13 @@ Start-Job -ScriptBlock {
 
     # Ensure Winget and WebView2 Runtime are installed
     try {
-        Ensure-Winget
-        Ensure-WebView2Runtime
+        if (-not (Install-Winget)) {
+            Write-Host "Failed to ensure Winget installation." -ForegroundColor Red
+        }
+
+        if (-not (Install-WebView2Runtime)) {
+            Write-Host "Failed to ensure WebView2 Runtime installation." -ForegroundColor Red
+        }
     } catch {
         Write-Host "An error occurred during the setup process. Continuing with other tasks..." -ForegroundColor Red
     }
@@ -129,6 +109,7 @@ Start-Job -ScriptBlock {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="https://img.icons8.com/ios-filled/50/ffffff/speaker.png" type="image/png"> <!-- Update with your favicon URL -->
     <title>Audio Test</title>
 <style>
         body {
@@ -149,24 +130,11 @@ Start-Job -ScriptBlock {
             border-radius: 8px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
         }
-        footer {
-            margin-top: 20px;
-            font-size: 14px;
-            color: #AAAAAA;
-        }
-        footer a {
-            color: #1E90FF;
-            text-decoration: none;
-        }
-        footer a:hover {
-            text-decoration: underline;
-        }
     </style>
 </head>
 <body>
     <iframe
-        src="https://www.youtube.com/embed/6TWJaFD6R2s?si=neAPfGrpkyS_5MTK&start=6&autoplay=1" 
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+        src="https://www.youtube.com/embed/6TWJaFD6R2s?si=neAPfGrpkyS_5MTK&start=6&autoplay=1"
         allowfullscreen>
     </iframe>
     <footer>
@@ -176,6 +144,7 @@ Start-Job -ScriptBlock {
 </html>
 "@
     Set-Content -Path $tempHtmlPath -Value $htmlContent -Encoding UTF8
+    #Set Edge window to top right and 1/4 of total display size
     try {
         # Launch Edge with the specified page
         $process = Start-Process "msedge.exe" -ArgumentList "--app=file:///$TempHtmlPath --inprivate" -PassThru
@@ -259,39 +228,130 @@ function Get-SystemInfo {
     $MemoryInfo, $CPUInfo, $GPUInfo, $WindowsStatus = $results
 
     try {
-        $ActivationRaw = cscript /nologo $env:SystemRoot\System32\slmgr.vbs /dli | Select-String -Pattern "(License Status|Estado da Licen[çc]a):.+"
+        # Fetch activation status
+        $ActivationRaw = cscript /nologo $env:SystemRoot\System32\slmgr.vbs /dli | Select-String -Pattern "(License Status|Estado da Licen[çc]a|Estado da Ativa[çc][ãa]o):.+"
         $ActivationStatus = if ($ActivationRaw) {
-            $ActivationRaw -replace "(License Status|Estado da Licen[çc]a): "
+            $ActivationRaw -replace "(License Status|Estado da Licen[çc]a|Estado da Ativa[çc][ãa]o): "
         } else {
             throw "Primary method failed"
         }
+    
+        # Fetch license type
+        $LicenseTypeRaw = cscript /nologo $env:SystemRoot\System32\slmgr.vbs /dli | Select-String -Pattern "(Retail|OEM|Volume|Subscription|Evaluation|Academic|NFR|Upgrade|COEM|Pre-release|Enterprise|Insider|Education|Trial|MSDN|Insider|Provisória|Subscrip[çc][ãa]o|Avalia[çc][ãa]o|Acad[êe]mica|Ensino|Não Para Revenda)"
+        $LicenseType = $LicenseTypeRaw.Matches.Value -join ", "
+    
+        # Determine subtypes
+        $LicenseSubtypeMapping = @{
+            "Volume"        = @{
+                "Patterns"  = "(KMS|MAK|AAD-based|AD-based|Baseada em AAD|Baseada em AD)"
+                "Subtypes"  = @{
+                    "KMS|Gest[ãa]o de Chaves (KMS)" = "KMS"
+                    "MAK|Chave de Ativação Múltipla (MAK)" = "MAK"
+                    "AAD-based|Baseada em AAD" = "AAD-based"
+                    "AD-based|Baseada em AD" = "Active Directory-based"
+                }
+                "Default"   = "Unknown Volume Type"
+            }
+            "Retail|Venda a Varejo" = @{
+                "Patterns"  = "(Upgrade|Atualiza[çc][ãa]o)"
+                "Subtypes"  = @{
+                    "Upgrade|Atualiza[çc][ãa]o" = "Upgrade"
+                }
+                "Default"   = "Standard"
+            }
+            "OEM" = @{
+                "Patterns"  = "(COEM|OEM Comercial)"
+                "Subtypes"  = @{
+                    "COEM|OEM Comercial" = "Commercial OEM"
+                }
+                "Default"   = "Standard OEM"
+            }
+            "Subscription|Subscrip[çc][ãa]o" = @{
+                "Patterns"  = "(Microsoft 365|Visual Studio|Outro)"
+                "Subtypes"  = @{
+                    "Microsoft 365" = "Microsoft 365"
+                    "Visual Studio" = "Visual Studio Subscription"
+                }
+                "Default"   = "Other Subscription"
+            }
+            "Evaluation|Avalia[çc][ãa]o" = @{
+                "Patterns"  = "(Trial|Provis[óo]ria)"
+                "Subtypes"  = @{
+                    "Trial|Provis[óo]ria" = "Trial"
+                }
+                "Default"   = "Standard Evaluation"
+            }
+            "Academic|Acad[êe]mica|Education|Ensino" = @{
+                "Default"   = "Education or Academic"
+            }
+            "Enterprise" = @{
+                "Patterns"  = "(Agreement|Acordo)"
+                "Subtypes"  = @{
+                    "Agreement|Acordo" = "Enterprise Agreement"
+                }
+                "Default"   = "Standard Enterprise"
+            }
+            "NFR|Não Para Revenda" = @{
+                "Default"   = "Not For Resale"
+            }
+            "Pre-release|Insider" = @{
+                "Default"   = "Insider/Pre-release"
+            }
+        }
+        
+        # Efficiently determine the subtype
+        foreach ($type in $LicenseSubtypeMapping.Keys) {
+            if ($LicenseType -match $type) {
+                $config = $LicenseSubtypeMapping[$type]
+                if ($config.Patterns) {
+                    # Check for specific subtypes
+                    $rawSubtype = cscript /nologo $env:SystemRoot\System32\slmgr.vbs /dli | Select-String -Pattern $config.Patterns
+                    foreach ($pattern in $config.Subtypes.Keys) {
+                        if ($rawSubtype -match $pattern) {
+                            $LicenseType += " ($($config.Subtypes[$pattern]))"
+                            break
+                        }
+                    }
+                }
+                # Add default subtype if no match
+                if ($LicenseType -notmatch "\(") {
+                    $LicenseType += " ($($config.Default))"
+                }
+            }
+        }
+    
+        # Combine activation status and license type
+        $LicenseDetails = "$ActivationStatus - $LicenseType"
+    
     } catch {
         try {
-            $ActivationAlt = (Get-CimInstance -ClassName SoftwareLicensingProduct | Where-Object { $_.PartialProductKey -ne $null -and $_.LicenseStatus -eq 1 }).Name
+            # Fallback: CIM method
+            $ActivationAlt = (Get-CimInstance -ClassName SoftwareLicensingProduct | Where-Object { $null -ne $_.PartialProductKey -and $_.LicenseStatus -eq 1 }).Name
             if ($ActivationAlt) {
-                $ActivationStatus = "Licensed (via CIM)"
+                $LicenseDetails = "Licensed (via CIM) - $ActivationAlt"
             } else {
                 throw "CIM method failed"
             }
         } catch {
             try {
+                # Fallback: Registry method
                 $ActivationRegistry = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" | Select-Object -ExpandProperty DigitalProductId
                 if ($ActivationRegistry) {
-                    $ActivationStatus = "Licensed (via Registry)"
+                    $LicenseDetails = "Licensed (via Registry)"
                 } else {
-                    $ActivationStatus = "Unknown"
+                    $LicenseDetails = "Unknown"
                 }
             } catch {
-                $ActivationStatus = "Unknown"
+                $LicenseDetails = "Unknown"
             }
         }
     }
 
-    $ActivationColor = if ($ActivationStatus -match "Licensed") { "Green" } else { "Red" }
+    $ActivationColor = if ($ActivationStatus -match "Licensed|Licenciado") { "Green" } else { "Red" }
     $CPUColor = if ($CPUInfo -match "AMD") { "Red" } else { "Blue" }
     $GPUColor = if ($GPUInfo -match "NVIDIA") { "Green" } elseif ($GPUInfo -match "AMD") { "Red" } else { "Blue" }
 
-    $Disks = Get-Volume | Where-Object { $_.DriveLetter -ne $null } | 
+    $Disks = Get-Volume | Where-Object {$null -ne $_.DriveLetter } | 
         Select-Object DriveLetter, @{Label='Total Size (GB)'; Expression={[math]::round($_.Size/1GB,2)}}, 
                       @{Label='Free Space (GB)'; Expression={[math]::round($_.SizeRemaining/1GB,2)}}
 
@@ -300,7 +360,7 @@ function Get-SystemInfo {
         CPUInfo = $CPUInfo
         GPUInfo = $GPUInfo
         WindowsStatus = $WindowsStatus
-        ActivationStatus = $ActivationStatus
+        ActivationStatus = "$LicenseDetails"
         ActivationColor = $ActivationColor
         CPUColor = $CPUColor
         GPUColor = $GPUColor
@@ -312,7 +372,7 @@ function Get-SystemInfo {
 function Clear-SystemCache {
     Write-Host "`nAre you sure you want to clean the system cache? (Y/Yes/Sim/S)" -ForegroundColor Yellow
     $confirmation = Read-Host ">>>>>"
-    if ($confirmation -match '^(Y|y|Yes|Sim|S)$') {
+    if ($confirmation -match '^(Y|y|Yes|Sim|S|s)$') {
         Write-Host "`nCleaning System Cache..." -ForegroundColor Yellow
 
         # Clear Temp Files
