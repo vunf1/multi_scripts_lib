@@ -438,15 +438,6 @@ function Clear-SystemCache {
 function Use-ConfigurePowerSettings {
     Write-Host "Configuring Power Settings..." -ForegroundColor Yellow
 
-    # Set the active power plan to 'High Performance'
-    <# $highPerformancePlan = (powercfg /l | Select-String -Pattern "High performance").Line.Split()[3]
-    if ($highPerformancePlan) {
-        powercfg /s $highPerformancePlan
-        Write-Host "Set power plan to High Performance." -ForegroundColor Green
-    } else {
-        Write-Host "High Performance power plan not found." -ForegroundColor Red
-    } #>
-
     # Set sleep and screen off timers to 0
     powercfg /change standby-timeout-ac 0
     powercfg /change standby-timeout-dc 0
@@ -522,7 +513,7 @@ function Show-SystemInfo {
     # Explicitly reference $global:SystemInfoData
     $data = $global:SystemInfoData
     Write-Host "=========================================================" -ForegroundColor Green
-    Write-Host "       Developed with ♥ by " -NoNewline; Write-Host "Vunf1" -ForegroundColor Green  -NoNewline; Write-Host " for " -NoNewline; Write-Host "HardStock" -ForegroundColor Cyan
+    Write-Host "       2024 Developed with ♥ by " -NoNewline; Write-Host "Vunf1" -ForegroundColor Green  -NoNewline; Write-Host " for " -NoNewline; Write-Host "HardStock" -ForegroundColor Cyan
     Write-Host "=========================================================" -ForegroundColor Green
     Write-Host "`nSystem Information:" -ForegroundColor Cyan
     $data.Disks | Format-Table -AutoSize
@@ -585,13 +576,13 @@ function Show-DriverPage {
             text-align: center;
         }
         .link-item img {
-            width: calc(64px * 1.25); /* Slightly increased size */
-            height: calc(64px * 1.25);
+            width: calc(100px * 1.60); /* Slightly increased size */
+            height: calc(100px * 1.60);
             margin-bottom: 10px; /* Space between image and text */
         }
         .link-item a {
             display: block; /* Ensures text is below the image */
-            font-size: calc(18px * 1.25);
+            font-size: calc(25px * 1.16);
             text-decoration: none;
             color: rgb(255, 255, 255);
         }
