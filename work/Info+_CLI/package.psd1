@@ -1,5 +1,5 @@
 @{
-    Root = 'f:\exc\scripts\various_scripts\multi_scripts_lib\work\Info+_CLI\main_helper_script.ps1'
+    Root = 'f:\exc\scripts\various_scripts\multi_scripts_lib\work\Info+_CLI\main.ps1'
     OutputPath = 'f:\exc\scripts\various_scripts\multi_scripts_lib\work\Info+_CLI\out'
     Package = @{
         Enabled = $true
