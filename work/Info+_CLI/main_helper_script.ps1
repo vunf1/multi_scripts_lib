@@ -67,38 +67,70 @@ function Show-SystemInfo {
     
 }
 Start-Files
+Clear-Host
 Show-YouTubeIframe
+Show-SystemInfo
 function KeyPressOption {
     param ([ConsoleKeyInfo]$Key)
     switch ($Key.KeyChar) {
-        "1" { Show-SystemInfo }
-        "2" { Show-DriverPage }
-        "3" { Start-Files }
-        "4" { Clear-SystemCache }
-        "5" { Use-ConfigurePowerSettings }
-        "6" { Start-ActivationScript }
-        "7" { Start-MemoryDiagnosticWithTask }
-        "0" { exit }
-        default { return }
+        "1" { 
+            Show-SystemInfo
+            DisplayMenu 
+            Write-Host "`nOption 1 executed: System Information refreshed." -ForegroundColor Green
+        }
+        "2" { 
+            Show-DriverPage 
+            Write-Host "`nOption 2 executed: Drivers Links displayed." -ForegroundColor Green
+        }
+        "3" { 
+            Start-Files 
+            Write-Host "`nOption 3 executed: Keyboard Test started." -ForegroundColor Green
+        }
+        "4" { 
+            Clear-SystemCache 
+            Write-Host "`nOption 4 executed: Cache cleared." -ForegroundColor Green
+        }
+        "5" { 
+            Use-ConfigurePowerSettings 
+            Write-Host "`nOption 5 executed: Power settings configured." -ForegroundColor Green
+        }
+        "6" { 
+            Start-ActivationScript 
+            Write-Host "`nOption 6 executed: Activation script started." -ForegroundColor Green
+        }
+        "7" { 
+            Start-MemoryDiagnosticWithTask 
+            Write-Host "`nOption 7 executed: Memory diagnostic started. System may restart." -ForegroundColor Green
+        }
+        "0" { 
+            Write-Host "`nExiting the program. Goodbye!" -ForegroundColor Red
+            exit 
+        }
     }
 }
 
-while ($true) {
-    Show-SystemInfo
-    Write-Host "`nChoose an option - 8 to EXIT:" -ForegroundColor Yellow
+function DisplayMenu {
+    Write-Host "`nChoose an option - 0 to EXIT:" -ForegroundColor Yellow
     Write-Host "1. Refresh System Information"
     Write-Host "2. Drivers Links"
     Write-Host "3. Keyboard Test"
     Write-Host "4. Cache Clean"
-    Write-Host "5. TWEAK - Display Not coming back when Suspended "
+    Write-Host "5. TWEAK - Display Not coming back when Suspended"
     Write-Host "6. Microsoft Activation Helper"
     Write-Host "7. Test Memory Windows - Restart Required"
     Write-Host "0. Exit"
     Write-Host " "
-    do {
-        $key = [System.Console]::ReadKey($true)
-    } while (-not ($key.KeyChar -match '^[0-7]$'))
-
-    KeyPressOption $key
 }
 
+# Display the menu once initially
+DisplayMenu
+
+# Loop to handle user input
+while ($true) {
+    $key = [System.Console]::ReadKey($true)
+
+    if ($key.KeyChar -match '^[0-7]$') {
+        KeyPressOption $key
+        # Re-display the menu after handling the choice
+    }
+}

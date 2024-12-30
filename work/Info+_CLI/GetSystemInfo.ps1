@@ -340,6 +340,7 @@ function Get-SystemInfo {
     } else { 
         "Gray" # Default fallback for unexpected GPUInfo
     }
+    Clear-Host
 
     # Create a PSCustomObject to return the system information
     return [PSCustomObject]@{
@@ -354,5 +355,4 @@ function Get-SystemInfo {
         CPUColor           = $CPUColor
         GPUColor           = $GPUColor
     }
-    Clear-Host
 }

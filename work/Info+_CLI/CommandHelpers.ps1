@@ -3,7 +3,7 @@ function Start-Executable {
         [Parameter(Mandatory = $true)]
         [hashtable]$Executables
     )
-    Clear-Host
+    
     $DisplayName= "Keyboard" # Hardcoded - Value is not been saved $DisplayName or $FilePath when tryCatch need futher debugging
 
     $FilePath = $Executables[$DisplayName]
@@ -171,7 +171,7 @@ function Start-Executable {
             Write-Host "Cleaned up runspace for $($runspace.InstanceId)" -ForegroundColor Green
         }
     } -ArgumentList $runspace, $asyncResult | Out-Null  # Suppress job output
-   Clear-Host
+   
 }
 
 
