@@ -1,25 +1,27 @@
 @{
-    Root = 'f:\exc\scripts\various_scripts\multi_scripts_lib\work\Info+_CLI\main.ps1'
-    OutputPath = 'f:\exc\scripts\various_scripts\multi_scripts_lib\work\Info+_CLI\out'
+    Root = 'F:\exc\scripts\various_scripts\multi_scripts_lib\work\Info+_CLI\main.ps1'
+    OutputPath = 'F:\exc\scripts\various_scripts\multi_scripts_lib\work\Info+_CLI\out'
     Package = @{
-        Enabled = $true
-        Obfuscate = $true
-        HideConsoleWindow = $false
+        Enabled = True
+        Obfuscate = True
+        HideConsoleWindow = False
         DotNetVersion = 'v4.6.2'
         FileVersion = '4.1.0'
-        FileDescription = 'PowerShell-based system utility designed to gather and display system information, perform background installation tasks (such as installing Winget and WebView2), and execute additional functionality like displaying a YouTube iframe. It supports modular design for handling various scripts and includes task monitoring with real-time status updates. The program is intended for advanced users or administrators and offers customization options like elevation requirements and bundling dependencies.'
+        FileDescription = 'PowerShell-based system utility with modular design and task monitoring.'
         ProductName = 'Info+'
         ProductVersion = '4.1.0'
-        Copyright = 'Maia'
-        RequireElevation = $true
+        Copyright = '© 2024 Maia Systems'
+        RequireElevation = True
         ApplicationIconPath = 'F:\exc\scripts\various_scripts\multi_scripts_lib\work\Info+_CLI\images\icons\icon4.ico'
-        PackageType = 'Console'    
-        TaskbarName = 'Info+'       # Add a TaskbarName property (if supported by your packaging tool)
-
+        TaskbarName = 'Info+'
+        LegalTrademarks = 'Info+ is a registered trademark of Maia'
+        CompanyName = 'Maia'
+        InternalName = 'InfoPlusApp'
+        OriginalFilename = 'InfoPlus.exe'
     }
     Bundle = @{
-        Enabled = $true
-        Modules = $true
+        Enabled = True
+        Modules = True
         AdditionalFiles = @(
             './CustomMessageBox.ps1',
             './DriversTest.ps1',
@@ -27,8 +29,15 @@
             './CommandHelpers.ps1',
             './GetSystemInfo.ps1',
             './TweaksSystem.ps1',
-            './InstallDependencies.ps1'
+            './images/logo.png',
+            './config/settings.json'
         )
     }
+    SignExecutable = @{
+        CertificatePath = 'F:\exc\scripts\various_scripts\multi_scripts_lib\work\Info+_CLI\MyCert.pfx'
+        CertificatePassword = 'YourStrongPassword'
+        TimestampURL = 'http://timestamp.digicert.com'
+        DigestAlgorithm = 'sha256' 
+        OverwriteSignature = True
+    }
 }
-        
