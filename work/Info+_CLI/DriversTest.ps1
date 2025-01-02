@@ -69,7 +69,7 @@ function Show-DriverPage {
             
         footer {
             position: absolute;
-            bottom: 1vh;
+            bottom: 0vh;
             width: 100%; 
             text-align: center;
             padding: 10px; 
