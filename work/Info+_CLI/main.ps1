@@ -2,16 +2,16 @@ $global:SystemInfoData = $null
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName WindowsFormsIntegration
 Add-Type -AssemblyName System.Windows.Forms
-$host.UI.RawUI.WindowTitle = "Info+"
+$host.UI.RawUI.WindowTitle = "Info+" # Set the title of the console window
 if ($PSScriptRoot) {
+    # Load dependent scripts from the current directory during development
     . "$PSScriptRoot\CustomMessageBox.ps1"
     . "$PSScriptRoot\DriversTest.ps1"
     . "$PSScriptRoot\AudioTest.ps1"
     . "$PSScriptRoot\CommandHelpers.ps1"
     . "$PSScriptRoot\GetSystemInfo.ps1"
     . "$PSScriptRoot\TweaksSystem.ps1"
-    . "$PSScriptRoot\InstallDependencies.ps1"
-} else {
+}else {
     . "./CustomMessageBox.ps1"
     . "./DriversTest.ps1"
     . "./AudioTest.ps1"
@@ -56,7 +56,7 @@ function Show-SystemInfo {
 
     $data.DiskInfo  | Format-Table -AutoSize
     Write-Host " "
-    $data.BatteryInfo  | Format-Table -AutoSize
+    #$data.BatteryInfo  | Format-Table -AutoSize
     Write-Host " "
 
     Write-Host "| Total Physical Memory      | $($data.MemoryInfo) GB            "
