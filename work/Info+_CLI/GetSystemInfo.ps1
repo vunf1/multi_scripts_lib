@@ -88,55 +88,98 @@ function Get-DiskInfo {
     return $Disks
 }
 
-function Get-BatteryInfo {
+function Get-SystemPowerInfo {
     try {
-        # Get all battery instances
-        $batteries = Get-CimInstance -ClassName Win32_Battery
+        # Check for power supply details
+        $powerSupplies = Get-CimInstance -ClassName Win32_PowerSupply -ErrorAction SilentlyContinue
 
-        if ($batteries -and $batteries.Count -gt 0) {
-            # Map battery information to a formatted output
-            $batteryInfo = $batteries | ForEach-Object {
-                try {
-                    [PSCustomObject]@{
-                        Name                   = $_.Name
-                        Status                 = $_.Status
-                        "Charge Remaining (%)" = if ($null -ne $_.EstimatedChargeRemaining) { "$($_.EstimatedChargeRemaining)%" } else { "N/A" }
-                        "Run Time (min)"       = if ($null -ne $_.EstimatedRunTime) { $_.EstimatedRunTime } else { "N/A" }
-                        Chemistry              = switch ($_.Chemistry) {
-                            1 { 'Other' }
-                            2 { 'Unknown' }
-                            3 { 'Lead Acid' }
-                            4 { 'Nickel Cadmium' }
-                            5 { 'Nickel Metal Hydride' }
-                            6 { 'Lithium-ion' }
-                            7 { 'Zinc Air' }
-                            8 { 'Lithium Polymer' }
-                            Default { 'Not Specified' }
-                        }
-                        "Health (%)"           = Measure-BatteryHealth -Battery $_
-                    }
-                } catch {
-                    # If data retrieval fails for a battery, return default values
-                    [PSCustomObject]@{
-                        Name                   = $_.Name
-                        Status                 = "Data Unavailable"
-                        "Charge Remaining (%)" = "N/A"
-                        "Run Time (min)"       = "N/A"
-                        Chemistry              = "N/A"
-                        "Health (%)"           = "Unknown"
-                    }
+        if ($powerSupplies -and $powerSupplies.Count -gt 0) {
+            $powerInfo = $powerSupplies | ForEach-Object {
+                [PSCustomObject]@{
+                    Name       = $_.Name
+                    Status     = $_.Status
+                    Wattage    = if ($null -ne $_.RatedCapacity) { "$($_.RatedCapacity) W" } else { "Unknown" }
+                    PowerState = "Connected"
                 }
             }
-
-            # Output the battery information in a table format
-            return $batteryInfo
+            return $powerInfo
         } else {
-            # Handle cases where no batteries are detected
-            return "No batteries detected on this machine."
+            # No external power supply detected
+            Get-BatteryInfo
         }
+    } catch {        
+        Get-BatteryInfo
+    }
+}
+
+function Get-BatteryInfo {
+    try {
+        # Attempt to fetch battery info using Win32_Battery
+        $batteries = Get-CimInstance -ClassName Win32_Battery -ErrorAction SilentlyContinue
+
+        # Fallback to Win32_PortableBattery if Win32_Battery returns nothing
+        if (-not $batteries -or $batteries.Count -eq 0) {
+            $batteries = Get-CimInstance -ClassName Win32_PortableBattery -ErrorAction SilentlyContinue
+        }
+
+        # Additional failsafe: Try WMI directly
+        if (-not $batteries -or $batteries.Count -eq 0) {
+            $batteries = Get-WmiObject -Query "SELECT * FROM Win32_Battery" -ErrorAction SilentlyContinue
+        }
+
+        # Final failsafe: Check for power settings via the PowerShell API
+        if (-not $batteries -or $batteries.Count -eq 0) {
+            $batteryStatus = powercfg /batteryreport > $null 2>&1
+            $reportPath = "$env:USERPROFILE\battery-report.html"
+            if (Test-Path $reportPath) {
+                return "Battery information could not be retrieved via standard methods, but a report was generated: $reportPath"
+            }
+        }
+
+        # If we still have no results, return a descriptive error
+        if (-not $batteries -or $batteries.Count -eq 0) {
+            return "No batteries detected or accessible on this machine, even after multiple attempts."
+        }
+
+        # Map battery information to a formatted output
+        $batteryInfo = $batteries | ForEach-Object {
+            try {
+                [PSCustomObject]@{
+                    Name                   = $_.Name
+                    Status                 = $_.Status
+                    "Charge Remaining (%)" = if ($null -ne $_.EstimatedChargeRemaining) { "$($_.EstimatedChargeRemaining)%" } else { "N/A" }
+                    "Run Time (min)"       = if ($null -ne $_.EstimatedRunTime) { $_.EstimatedRunTime } else { "N/A" }
+                    Chemistry              = switch ($_.Chemistry) {
+                        1 { 'Other' }
+                        2 { 'Unknown' }
+                        3 { 'Lead Acid' }
+                        4 { 'Nickel Cadmium' }
+                        5 { 'Nickel Metal Hydride' }
+                        6 { 'Lithium-ion' }
+                        7 { 'Zinc Air' }
+                        8 { 'Lithium Polymer' }
+                        Default { 'Not Specified' }
+                    }
+                    "Health (%)"           = Measure-BatteryHealth -Battery $_
+                }
+            } catch {
+                # If data retrieval fails for a battery, return default values
+                [PSCustomObject]@{
+                    Name                   = "Unknown"
+                    Status                 = "Data Unavailable"
+                    "Charge Remaining (%)" = "N/A"
+                    "Run Time (min)"       = "N/A"
+                    Chemistry              = "N/A"
+                    "Health (%)"           = "Unknown"
+                }
+            }
+        }
+
+        # Output the battery information
+        return $batteryInfo
     } catch {
         # Handle errors during retrieval
-        return "An error occurred while retrieving battery information: $_"
+        return "An error occurred while retrieving battery information: $($_.Exception.Message)"
     }
 }
 
@@ -146,12 +189,35 @@ function Measure-BatteryHealth {
         $Battery
     )
 
-    if ($Battery.DesignCapacity -and $Battery.FullChargeCapacity) {
-        return [math]::round(($Battery.FullChargeCapacity / $Battery.DesignCapacity) * 100, 2) + "%"
-    } else {
+    try {
+        if ($Battery.DesignCapacity -and $Battery.FullChargeCapacity -and
+            $Battery.DesignCapacity -gt 0 -and $Battery.FullChargeCapacity -gt 0) {
+            return [math]::round(($Battery.FullChargeCapacity / $Battery.DesignCapacity) * 100, 2) + "%"
+        } else {
+            return "Unknown"
+        }
+    } catch {
         return "Unknown"
     }
 }
+
+# Main function to check power information
+function Check-SystemPower {
+    $powerSupplyInfo = Get-SystemPowerInfo
+
+    if ($powerSupplyInfo -is [string]) {
+        # If no power supply detected, check for batteries
+        Write-Host $powerSupplyInfo
+        $batteryInfo = Get-BatteryInfo
+        Write-Output $batteryInfo
+    } else {
+        # Display power supply information
+        Write-Output $powerSupplyInfo
+    }
+}
+
+# Example usage:
+Check-SystemPower
 
 
 # Define helper functions for specific tasks
@@ -307,7 +373,7 @@ function Get-SystemInfo {
         { return Get-GPUInfo },
         { return Get-WindowsVersion },
         { return Get-ActivationDetails },
-        { return Get-BatteryInfo },
+        #{ return Get-SystemPowerInfo },
         { return Get-DiskInfo }
     )
 
