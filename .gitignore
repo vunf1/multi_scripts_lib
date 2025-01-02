@@ -36,3 +36,6 @@ work/build.ps1
 work/Info+_CLI/PS2EXE-master.zip
 work/.vscode/c_cpp_properties.json
 work/.vscode/settings.json
+work/Info+_CLI/MyCert.pfx
+work/Info+_CLI/ConfigPackageToEXE copy.ps1
+work/Info+_CLI/package222.psd1
