@@ -26,12 +26,11 @@ function Show-DriverPage {
         body {
             font-family: Arial, sans-serif;
             background-color: rgb(77, 77, 77);
-            margin: 0;
+            margin: 5vh;
             display: flex;
-            flex-direction: column; /* Arrange items vertically */
+            flex-direction: column;
             justify-content: center;
             align-items: center;
-            min-height: 100vh; /* Ensure the body fills the viewport height */
         }
         .content {
             text-align: center;
@@ -39,23 +38,28 @@ function Show-DriverPage {
             
         .links {
             display: grid;
-            grid-template-columns: repeat(3, 1fr); /* 3 columns */
-            gap: 20px; /* Space between grid items */
-            width: 80%; /*Adjust as needed for layout */
-            margin: 0 auto; /* Center the grid horizontally */
+            grid-template-columns: repeat(3, 1fr); 
+            gap: 20px;
+            width: 90%; 
+            margin: 0 auto;
         }
             
         .link-item {
-            text-align: center;
+            text-align: center; 
+            display: flex;
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
         }
         .link-item img {
-            width: calc(100px * 1.60); 
-            height: calc(100px * 1.60);
-            margin-bottom: 10px; 
+            width: 80%; 
+            max-width: 150px; 
+            height: auto; 
+            margin-bottom: 10px;
         }
         .link-item a {
-            display: block; 
-            font-size: calc(25px * 1.16);
+            display: block;
+            font-size: 1.2em; /* Responsive text size */
             text-decoration: none;
             color: rgb(255, 255, 255);
         }
@@ -70,10 +74,10 @@ function Show-DriverPage {
         footer {
             position: absolute;
             bottom: 0vh;
-            width: 100%; 
+            width: 100%;
             text-align: center;
-            padding: 10px; 
-            font-size: 16px; 
+            padding: 10px;
+            font-size: 16px;
             color: #E0E0E0;
         }
         footer a {
@@ -84,7 +88,34 @@ function Show-DriverPage {
             text-decoration: underline;
             color: #1ED760;
         }
+
+        @media (max-width: 768px) {
+            .links {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 15px;
+            }
+            .link-item img {
+                max-width: 120px; 
+            }
+            .link-item a {
+                font-size: 1em; 
+            }
+        }
+
+        @media (max-width: 480px) {
+            .links {
+                grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); 
+                gap: 10px;
+            }
+            .link-item img {
+                max-width: 100px;
+            }
+            .link-item a {
+                font-size: 0.9em;
+            }
+        }
     </style>
+
     
     <script>    
         document.addEventListener('keydown', function (event) {
@@ -130,17 +161,24 @@ function Show-DriverPage {
 "@
 
 
-    # Save HTML to a temp file
-    $tempHtmlPath = "$env:TEMP\DriversLinks.html"
-    Set-Content -Path $tempHtmlPath -Value $htmlContent -Encoding UTF8
+    # Encode the HTML content as Base64
+    $base64Content = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($htmlContent))
 
-    # Launch Edge and manipulate its window
+    # Construct the data URL
+    $dataUrl = "data:text/html;base64,$base64Content"
+
+    $edgePath = Get-EdgePath
+
+    # Launch Edge with the Base64 content
     try {
-        # Launch Edge with the specified page
-        Start-Process "msedge.exe" -ArgumentList "--app=file:///$tempHtmlPath --inprivate"
-        # Wait for the process to start
-        Start-Sleep -Seconds 3
-        Remove-Item -Path $tempHtmlPath -Force
+        # Define Edge arguments
+        $arguments = @(
+            "--app=$dataUrl"          
+            "--inprivate"
+        )
+
+        # Start Edge with the defined arguments
+        Start-Process -FilePath $edgePath -ArgumentList $arguments
     } catch {
         Write-Host "Error during Edge manipulation: $_" -ForegroundColor Red
     }

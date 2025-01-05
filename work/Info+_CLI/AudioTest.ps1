@@ -4,9 +4,7 @@ function Show-YouTubeIframe {
         [string]$DeveloperName = "Vunf1",
         [string]$GitHubURL = "https://github.com/vunf1"
     )
-
-    # Create and display the YouTube iframe
-    $tempHtmlPath = "$env:TEMP\YouTubeAudioTest.html"
+    
     $htmlContent = @"
     <!DOCTYPE html>
     <html lang="en">
@@ -163,18 +161,24 @@ function Show-YouTubeIframe {
     </body>
     </html>
 "@
-    Set-Content -Path $tempHtmlPath -Value $htmlContent -Encoding UTF8
 
+
+    # Encode the HTML content as Base64 avoid the need to save the HTML file to disk. 
+    # The HTML content is entirely self-contained in the data: URL, ensuring portability and ease of testing.
+    $base64Content = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($htmlContent))
+    
+    # Construct the data URL
+    $dataUrl = "data:text/html;base64,$base64Content"
+    
+    $edgePath = Get-EdgePath
     try {
-        # Launch Edge with the specified page
-        $process = Start-Process "msedge.exe" -ArgumentList "--app=file:///$TempHtmlPath --inprivate --window-position=500,0" -PassThru
-
-        # Wait for Edge process to exit
-        $process.WaitForExit()
-
-        # Delay cleanup to ensure Edge fully releases the file
-        Start-Sleep -Seconds 5
-        Remove-Item -Path $tempHtmlPath -Force
+        
+        $arguments = @(
+            "--app=$dataUrl"              
+            "--inprivate"    
+        )
+        
+        Start-Process -FilePath $edgePath -ArgumentList $arguments
     } catch {
         Write-Host "Error during iframe execution: $_" -ForegroundColor Red
     }
