@@ -337,4 +337,24 @@ function Start-Files {
     # Call the Start-Executable function with the hash table
     Start-Executable -Executables $executables
 }
-Start-Files
+function Get-EdgePath {
+    # Try to find msedge.exe in the system's PATH
+    $edgePath = (Get-Command "msedge.exe" -ErrorAction SilentlyContinue).Source
+
+    # If not found, attempt default installation paths
+    if (-not $edgePath) {
+        $defaultPaths = @(
+            "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
+        )
+        foreach ($path in $defaultPaths) {
+            if (Test-Path $path) {
+                $edgePath = $path
+                break
+            }
+        }
+    }
+
+    # Return the found path or null if not found
+    return $edgePath
+}

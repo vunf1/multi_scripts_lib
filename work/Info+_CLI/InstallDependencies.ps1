@@ -44,7 +44,7 @@ $installWingetScript = {
 
             if (Test-Path $tempInstaller) { Remove-Item -Path $tempInstaller -Force }
             try {
-                Invoke-WebRequest -Uri $appInstallerUri -OutFile $tempInstaller -UseBasicParsing
+                #Invoke-WebRequest -Uri $appInstallerUri -OutFile $tempInstaller -UseBasicParsing
                 Add-AppxPackage -Path $tempInstaller
                 if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
                     [System.Windows.Forms.MessageBox]::Show("Failed to install Winget.", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
