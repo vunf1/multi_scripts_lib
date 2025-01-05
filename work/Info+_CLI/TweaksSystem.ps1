@@ -74,3 +74,37 @@ function Use-ConfigurePowerSettings {
 
     Write-Host "Power settings configured successfully." -ForegroundColor Green
 }
+function Register-OEMKey {
+    try {
+        # Retrieve the OEM key
+        $oemKey = (Get-CimInstance -ClassName SoftwareLicensingService).OA3xOriginalProductKey
+        if (-not $oemKey) {
+            Write-Host "OEM Key not found on this system." -ForegroundColor Red
+            return
+        }
+
+        # Display the OEM Key
+        Write-Host "OEM Key Found: $oemKey" -ForegroundColor Yellow
+
+        # Reinstall the OEM key
+        Write-Host "Reinstalling OEM key..." -ForegroundColor Cyan
+        $installKeyCommand = "cscript.exe $env:SystemRoot\System32\slmgr.vbs /ipk $oemKey"
+        Invoke-Expression $installKeyCommand
+
+        # Activate the key
+        Write-Host "Activating the OEM key..." -ForegroundColor Cyan
+        $activateCommand = "cscript.exe $env:SystemRoot\System32\slmgr.vbs /ato"
+        Invoke-Expression $activateCommand
+
+        # Validate activation status
+        Write-Host "Validating activation status..." -ForegroundColor Cyan
+        $statusCommand = "cscript.exe $env:SystemRoot\System32\slmgr.vbs /dli"
+        $activationStatus = Invoke-Expression $statusCommand
+
+        # Display the activation status
+        Write-Host "Activation Status:" -ForegroundColor Green
+        Write-Host $activationStatus
+    } catch {
+        Write-Host "An error occurred: $_" -ForegroundColor Red
+    }
+}

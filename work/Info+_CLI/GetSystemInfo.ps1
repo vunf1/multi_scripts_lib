@@ -24,43 +24,57 @@ function Get-DiskInfo {
                     # Calculate health percentage for SSD or HDD dynamically
                     if ($physicalDisk.MediaType -eq "SSD") {
                         # Use SMART attributes for SSD if available
-                        $smartData = Get-WmiObject -Namespace "root\WMI" -Class "MSStorageDriver_FailurePredictStatus" |
-                            Where-Object { $_.InstanceName -match $diskNumber }
 
-                        if ($smartData -and $smartData.PredictFailure -eq $false) {
-                            # If PredictFailure is false, assume 100% health
-                            $healthPercentage = "100%"
-                        } elseif ($smartData -and $smartData.PredictFailure -eq $true) {
-                            # If PredictFailure is true, mark as failing
-                            $healthPercentage = "10%"
-                            $diskHealth = "Failing"
-                        } else {
+                        try {
+                            # Use Get-CimInstance for SMART data
+                            $smartData = Get-CimInstance -Namespace "root\WMI" -ClassName "MSStorageDriver_FailurePredictStatus" |
+                                Where-Object { $_.InstanceName -match $diskNumber }
+                        
+                            if ($smartData -and $smartData.PredictFailure -eq $false) {
+                                $healthPercentage = "100%"
+                            } elseif ($smartData -and $smartData.PredictFailure -eq $true) {
+                                $healthPercentage = "10%"
+                                $diskHealth = "Failing"
+                            } else {
+                                $healthPercentage = "Unknown%"
+                            }
+                        } catch {
+                            # Handle 'Access Denied' or other errors
+                            Write-Host "Access denied when querying SMART data for disk $diskNumber. Using alternative logic." -ForegroundColor Yellow
+                            $diskHealth = "Error: Unable to query SMART data"
                             $healthPercentage = "Unknown%"
-                        }
+                        }                       
+                        
                     } else {
                         # Default for HDD: Assuming manual degradation over time
-                        $healthPercentage = "100%"
+                        $healthPercentage = "HDD: Assuming manual degradation over time"
                     }
                 } else {
-                    # Fallback to SMART attributes if Get-PhysicalDisk fails
-                    $smartData = Get-WmiObject -Namespace "root\WMI" -Class "MSStorageDriver_FailurePredictData" |
-                        Where-Object { $_.InstanceName -match $diskNumber }
-                    if ($smartData) {
-                        # SMART attributes interpretation for a dynamic percentage
-                        $currentValue = $smartData.VendorSpecific[3]  # Example attribute
-                        $thresholdValue = $smartData.VendorSpecific[5]
-
-                        if ($null -ne $currentValue -and $null -ne $thresholdValue -and $thresholdValue -ne 0) {
-                            $healthPercentage = [math]::round(($currentValue / $thresholdValue) * 100, 2)
-                            $diskHealth = if ($healthPercentage -ge 70) { "Healthy" } elseif ($healthPercentage -ge 40) { "Warning" } else { "Failing" }
+                    try {
+                        # Fallback to SMART attributes if Get-PhysicalDisk fails
+                        $smartData = Get-CimInstance -Namespace "root\WMI" -ClassName "MSStorageDriver_FailurePredictData" |
+                            Where-Object { $_.InstanceName -match $diskNumber }
+                        if ($smartData) {
+                            $currentValue = $smartData.VendorSpecific[3]
+                            $thresholdValue = $smartData.VendorSpecific[5]
+                    
+                            if ($null -ne $currentValue -and $null -ne $thresholdValue -and $thresholdValue -ne 0) {
+                                $healthPercentage = [math]::round(($currentValue / $thresholdValue) * 100, 2)
+                                $diskHealth = if ($healthPercentage -ge 70) { "Healthy" } elseif ($healthPercentage -ge 40) { "Warning" } else { "Failing" }
+                            } else {
+                                $diskHealth = "Unknown (Invalid SMART Data)"
+                                $healthPercentage = "Unknown%"
+                            }
                         } else {
-                            $diskHealth = "Unknown (Invalid SMART Data)"
+                            Write-Host "SMART data not available for disk $diskNumber." -ForegroundColor Yellow
+                            $diskHealth = "Unknown (No SMART Data)"
                             $healthPercentage = "Unknown%"
                         }
-                    } else {
-                        $diskHealth = "Unknown (No SMART Data)"
-                        $healthPercentage = "Unknown%"
-                    }
+                    } catch {
+                        Write-Host "Error accessing SMART data for disk ${diskNumber}: $_" -ForegroundColor Red
+                        $diskHealth = "Error"
+                        $healthPercentage = "Error%"
+                    }                  
                 }
             } else {
                 $diskHealth = "Unknown (No Partition Data)"
@@ -88,6 +102,7 @@ function Get-DiskInfo {
     return $Disks
 }
 
+
 function Get-SystemPowerInfo {
     try {
         # Check for power supply details
@@ -104,13 +119,15 @@ function Get-SystemPowerInfo {
             }
             return $powerInfo
         } else {
-            # No external power supply detected
-            Get-BatteryInfo
+            Write-Host "No power supply detected. Checking for battery information..." -ForegroundColor Yellow
+            return Get-BatteryInfo
         }
-    } catch {        
-        Get-BatteryInfo
+    } catch {
+        Write-Host "Access denied or error retrieving power supply information: $_" -ForegroundColor Red
+        return "Unable to retrieve power supply information."
     }
 }
+
 
 function Get-BatteryInfo {
     try {
@@ -124,16 +141,7 @@ function Get-BatteryInfo {
 
         # Additional failsafe: Try WMI directly
         if (-not $batteries -or $batteries.Count -eq 0) {
-            $batteries = Get-WmiObject -Query "SELECT * FROM Win32_Battery" -ErrorAction SilentlyContinue
-        }
-
-        # Final failsafe: Check for power settings via the PowerShell API
-        if (-not $batteries -or $batteries.Count -eq 0) {
-            $batteryStatus = powercfg /batteryreport > $null 2>&1
-            $reportPath = "$env:USERPROFILE\battery-report.html"
-            if (Test-Path $reportPath) {
-                return "Battery information could not be retrieved via standard methods, but a report was generated: $reportPath"
-            }
+            $batteries = Get-CimInstance -Query "SELECT * FROM Win32_Battery" -ErrorAction SilentlyContinue
         }
 
         # If we still have no results, return a descriptive error
@@ -183,6 +191,7 @@ function Get-BatteryInfo {
     }
 }
 
+
 function Measure-BatteryHealth {
     param (
         [Parameter(Mandatory = $true)]
@@ -202,7 +211,7 @@ function Measure-BatteryHealth {
 }
 
 # Main function to check power information
-function Check-SystemPower {
+function Get-SystemPower {
     $powerSupplyInfo = Get-SystemPowerInfo
 
     if ($powerSupplyInfo -is [string]) {
@@ -215,10 +224,6 @@ function Check-SystemPower {
         Write-Output $powerSupplyInfo
     }
 }
-
-# Example usage:
-Check-SystemPower
-
 
 # Define helper functions for specific tasks
 function Get-TotalSticksRam {
@@ -361,6 +366,149 @@ function Get-ActivationDetails {
     }
     return $LicenseDetails
 }
+function Show-WindowsProductKeys {
+    try {
+        # Function to decode the product key
+        function Convert-Key {
+            param (
+                [byte[]]$DigitalProductId
+            )
+            $keyChars = "BCDFGHJKMPQRTVWXY2346789"
+            $decodedKey = ""
+            $key = New-Object 'System.Collections.Generic.List[System.Byte]'
+
+            # Initialize the key array from DigitalProductId
+            for ($i = 52; $i -ge 52 - 15; $i--) {
+                $key.Add($DigitalProductId[$i])
+            }
+
+            # Decode the key
+            for ($i = 0; $i -lt 25; $i++) {
+                $current = 0
+                for ($j = 14; $j -ge 0; $j--) {
+                    $current = ($current * 256) + $key[$j]
+                    $key[$j] = [math]::Floor($current / 24)
+                    $current = $current % 24
+                }
+                $decodedKey = $keyChars[$current] + $decodedKey
+            }
+
+            # Ensure the key is valid and contains 25 characters
+            if ($decodedKey.Length -ne 25) {
+                throw "Decoded product key length is invalid: $($decodedKey.Length)"
+            }
+
+            # Insert dashes for readability
+            $decodedKey = $decodedKey.Substring(0, 5) + "-" +
+                          $decodedKey.Substring(5, 5) + "-" +
+                          $decodedKey.Substring(10, 5) + "-" +
+                          $decodedKey.Substring(15, 5) + "-" +
+                          $decodedKey.Substring(20, 5)
+            return $decodedKey
+        }
+
+        # Retrieve installed product key
+        $digitalProductId = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").DigitalProductId
+        if (-not $digitalProductId) {
+            throw "DigitalProductId not found in the registry."
+        }
+
+        $installedKey = Convert-Key -DigitalProductId $digitalProductId
+
+        # Retrieve OEM key if available
+        $oemKey = (Get-CimInstance -ClassName SoftwareLicensingService).OA3xOriginalProductKey
+
+        # Determine color for keys
+        $installedKeyColor = if ($installedKey -ne "Error") { "Yellow" } else { "Red" }
+        $oemKeyColor = if ($oemKey -eq "Not Found") {
+            "Yellow"
+        } elseif ($oemKey -eq "Error") {
+            "Red"
+        } else {
+            "Green"
+        }
+
+        # Return the results with color metadata
+        return [PSCustomObject]@{
+            InstalledKey      = $installedKey
+            InstalledKeyColor = $installedKeyColor
+            OEMKey            = if ($oemKey) { $oemKey } else { "Not Found" }
+            OEMKeyColor       = $oemKeyColor
+        }
+    } catch {
+        Write-Error $_.Exception.Message
+        # Return error details with color metadata
+        return [PSCustomObject]@{
+            InstalledKey      = "Error"
+            InstalledKeyColor = "Red"
+            OEMKey            = "Error"
+            OEMKeyColor       = "Red"
+            ErrorMessage      = $_.Exception.Message
+        }
+    }
+}
+
+function Get-CameraAndOpenApp {
+    try {
+        # Check for camera devices using the Win32_PnPEntity class
+        $cameraDevices = Get-CimInstance -ClassName Win32_PnPEntity | Where-Object {
+            $_.Name -match "Camera|Webcam|Imaging Device" -or $_.PNPClass -eq "Image"
+        }
+
+        if ($cameraDevices -and $cameraDevices.Count -gt 0) {
+            Write-Host "Camera driver found:" -ForegroundColor Green
+            $cameraDevices | ForEach-Object {
+                Write-Host "Name: $($_.Name)"
+            }
+
+            # Attempt to open the default camera app
+            try {
+                Start-Process -FilePath "microsoft.windows.camera:"
+                Write-Host "Opening the default Camera app..." -ForegroundColor Green
+            } catch {
+                Write-Host "Default Camera app launch failed. Attempting fallback options..." -ForegroundColor Yellow
+                
+                # Fallback 1: Use explorer with URI
+                try {
+                    Start-Process -FilePath "explorer.exe" -ArgumentList "microsoft.windows.camera:"
+                    Write-Host "Fallback: Opened Camera app via explorer.exe." -ForegroundColor Green
+                } catch {
+                    Write-Host "Fallback 1 failed: Could not open Camera app via explorer." -ForegroundColor Red
+                    
+                    # Fallback 2: Launch directly from package path
+                    try {
+                        $cameraPath = "C:\Windows\SystemApps\Microsoft.WindowsCamera_cw5n1h2txyewy\WindowsCamera.exe"
+                        if (Test-Path $cameraPath) {
+                            Start-Process -FilePath $cameraPath
+                            Write-Host "Fallback: Opened Camera app directly from package path." -ForegroundColor Green
+                        } else {
+                            Write-Host "Fallback 2 failed: Camera app not found in the expected path." -ForegroundColor Red
+                        }
+                    } catch {
+                        Write-Host "Fallback 2 failed: Unable to launch Camera app from package path." -ForegroundColor Red
+                        
+                        # Fallback 3: Open shell AppsFolder
+                        try {
+                            Start-Process -FilePath "shell:AppsFolder\Microsoft.WindowsCamera_cw5n1h2txyewy!App"
+                            Write-Host "Fallback: Opened Camera app using shell:AppsFolder." -ForegroundColor Green
+                        } catch {
+                            Write-Host "Fallback 3 failed: Could not open Camera app using shell:AppsFolder." -ForegroundColor Red
+                            
+                            # Fallback 4: Suggest alternatives
+                            Write-Host "Unable to open the Camera app. Consider using a third-party application or online tools like https://webcamtests.com." -ForegroundColor Red
+                        }
+                    }
+                }
+            }
+        } else {
+            Write-Host "No camera driver detected on this machine." -ForegroundColor Red
+        }
+    } catch {
+        Write-Host "An error occurred while checking for camera drivers: $_" -ForegroundColor Red
+    }
+}
+
+
 
 function Get-SystemInfo {
     # Display a message to indicate the start of information gathering
@@ -373,14 +521,14 @@ function Get-SystemInfo {
         { return Get-GPUInfo },
         { return Get-WindowsVersion },
         { return Get-ActivationDetails },
-        #{ return Get-SystemPowerInfo },
+        { return Show-WindowsProductKeys },
         { return Get-DiskInfo }
     )
 
     # Collect the results by invoking each task
     $results = $tasks | ForEach-Object { &$_ }
     # Map results to respective variables
-    $MemoryInfo, $CPUInfo, $GPUInfo, $WindowsStatus, $ActivationStatus, $BatteryInfo, $DiskInfo = $results
+    $MemoryInfo, $CPUInfo, $GPUInfo, $WindowsStatus, $ActivationStatus, $ProductKeys, $DiskInfo = $results
 
     # Determine colors for CPU, GPU, and activation status
     $ActivationColor = if ($ActivationStatus -match "Licensed|Licenciado") { 
@@ -406,7 +554,6 @@ function Get-SystemInfo {
     } else { 
         "Gray" # Default fallback for unexpected GPUInfo
     }
-    Clear-Host
 
     # Create a PSCustomObject to return the system information
     return [PSCustomObject]@{
@@ -414,7 +561,7 @@ function Get-SystemInfo {
         CPUInfo            = $CPUInfo
         GPUInfo            = $GPUInfo
         DiskInfo           = $DiskInfo
-        BatteryInfo        = $BatteryInfo
+        ProductKeys        = $ProductKeys
         WindowsStatus      = $WindowsStatus
         ActivationStatus   = $ActivationStatus
         ActivationColor    = $ActivationColor
