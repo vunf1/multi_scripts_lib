@@ -115,6 +115,9 @@ function Show-YouTubeIframe {
                 function refreshIframe() {
                     const iframe = document.getElementById('youtubeIframe');
                     iframe.src = iframe.src; // Reload iframe source
+                    player.mute();
+                    buttonIcon.src = "https://img.icons8.com/ios-filled/50/ffffff/speaker.png";
+                    buttonText.textContent = "CLICK TO UNMUTE";
                 }
 
                 document.addEventListener('keydown', function (event) {

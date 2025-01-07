@@ -72,13 +72,12 @@ function Show-DriverPage {
         }
             
         footer {
-            position: absolute;
-            bottom: 0vh;
-            width: 100%;
+            margin-top: auto;
             text-align: center;
             padding: 10px;
             font-size: 16px;
             color: #E0E0E0;
+            width: 100%;
         }
         footer a {
             text-decoration: none;
