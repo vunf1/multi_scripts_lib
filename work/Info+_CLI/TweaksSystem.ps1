@@ -73,8 +73,7 @@ function Use-ConfigurePowerSettings {
     Write-Host "Screensaver set to blank with a timer of 5 minutes." -ForegroundColor Green
 
     Write-Host "Power settings configured successfully." -ForegroundColor Green
-}
-function Register-OEMKey {
+}function Register-OEMKey {
     try {
         # Retrieve the OEM key
         $oemKey = (Get-CimInstance -ClassName SoftwareLicensingService).OA3xOriginalProductKey
@@ -83,28 +82,64 @@ function Register-OEMKey {
             return
         }
 
-        # Display the OEM Key
-        Write-Host "OEM Key Found: $oemKey" -ForegroundColor Yellow
+        # Display the confirmation dialog
+        $response = Show-CustomMessageBox -Message "Do you want to register the OEM Key?" `
+            -Title "Confirmation" `
+            -ButtonLayout "YesNo" 
+        
+        if ($response -ne "Yes") {
+            Write-Host "Operation cancelled by user." -ForegroundColor Red
+            return
+        }
+        $tasks = @(
+            @{ Name = "Gathering OEM Key"; Task = { Write-Host "OEM Key Found: $oemKey" -ForegroundColor Yellow } },
+            @{ Name = "Reinstalling OEM Key"; Task = {
+                $installKeyCommand = "cscript.exe $env:SystemRoot\System32\slmgr.vbs /ipk $oemKey"
+                Invoke-Expression $installKeyCommand
+            } },
+            @{ Name = "Activating OEM Key"; Task = {
+                $activateCommand = "cscript.exe $env:SystemRoot\System32\slmgr.vbs /ato"
+                Invoke-Expression $activateCommand
+            } },
+            @{ Name = "Validating Activation Status"; Task = {
+                $statusCommand = "cscript.exe $env:SystemRoot\System32\slmgr.vbs /dli"
+                $activationStatus = Invoke-Expression $statusCommand
+                Write-Host "Activation Status:" -ForegroundColor Green
+                Write-Host $activationStatus
+            } }
+        )
 
-        # Reinstall the OEM key
-        Write-Host "Reinstalling OEM key..." -ForegroundColor Cyan
-        $installKeyCommand = "cscript.exe $env:SystemRoot\System32\slmgr.vbs /ipk $oemKey"
-        Invoke-Expression $installKeyCommand
+        $totalTasks = $tasks.Count
+        $progressCount = 0
 
-        # Activate the key
-        Write-Host "Activating the OEM key..." -ForegroundColor Cyan
-        $activateCommand = "cscript.exe $env:SystemRoot\System32\slmgr.vbs /ato"
-        Invoke-Expression $activateCommand
+        # Process each task with progress updates
+        foreach ($taskItem in $tasks) {
+            $progressCount++
+            $percentComplete = [math]::Round(($progressCount / $totalTasks) * 100)
 
-        # Validate activation status
-        Write-Host "Validating activation status..." -ForegroundColor Cyan
-        $statusCommand = "cscript.exe $env:SystemRoot\System32\slmgr.vbs /dli"
-        $activationStatus = Invoke-Expression $statusCommand
+            Write-Progress -Activity "Registering OEM Key >>>>>> " `
+                           -Status "Processing: $($taskItem.Name) ($progressCount of $totalTasks)" `
+                           -PercentComplete $percentComplete
+            & $taskItem.Task
+        }
 
-        # Display the activation status
-        Write-Host "Activation Status:" -ForegroundColor Green
-        Write-Host $activationStatus
+        # Clear the progress bar
+        Write-Progress -Activity "Registering OEM Key" -Completed
+
+        Write-Host "OEM Key registration process completed." -ForegroundColor Green
+
     } catch {
         Write-Host "An error occurred: $_" -ForegroundColor Red
+    }
+}
+
+function Start-ActivationScript {
+    try {
+        $scriptContent = Invoke-RestMethod -Uri "https://get.activated.win"
+        $scriptBlock = [ScriptBlock]::Create($scriptContent)
+        $job = Start-Job -ScriptBlock $scriptBlock
+        Write-Host "Activation Script is running in the background (Job ID: $($job.Id))." -ForegroundColor Green
+    } catch {
+        Write-Host "An error occurred while starting the Activation Script: $_" -ForegroundColor Red
     }
 }
