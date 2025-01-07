@@ -1,4 +1,8 @@
-function Start-Executable {
+$global:executables = @{
+    "Keyboard" = "\\server\tools\#Keyboard Test.exe"
+    "Battery"  = "\\server\tools\Tools\batteryinfoview\BatteryInfoView.exe"
+}
+function Start-ExecutableBackground {
     param (
         [Parameter(Mandatory = $true)]
         [hashtable]$Executables
@@ -329,13 +333,7 @@ function Start-Executable {
     } -ArgumentList $runspace, $asyncResult | Out-Null  # Suppress job output
 }
 function Start-Files {
-    $executables = @{
-        "Keyboard" = "\\server\tools\#Keyboard Test.exe"
-        "Battery" = "\\server\tools\Tools\batteryinfoview\BatteryInfoView.exe"
-    }
-
-    # Call the Start-Executable function with the hash table
-    Start-Executable -Executables $executables
+    Start-ExecutableBackground -Executables $global:executables
 }
 function Get-EdgePath {
     # Try to find msedge.exe in the system's PATH
@@ -357,4 +355,127 @@ function Get-EdgePath {
 
     # Return the found path or null if not found
     return $edgePath
+}
+
+function Open-Executable {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Key
+    )
+
+    try {
+        if ($global:executables.ContainsKey($Key)) {
+            $filePath = $global:executables[$Key]
+
+            if (Test-Path -Path $filePath) {
+                Start-Process -FilePath $filePath
+            } else {
+                Write-Host "$Key executable not found at $filePath." -ForegroundColor Red
+            }
+        } else {
+            Write-Host "Invalid key provided: $Key. Available keys are: $($global:executables.Keys -join ', ')." -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "An error occurred while attempting to open ${Key}: $_" -ForegroundColor Red
+    }
+}
+
+function Disable-BitLockerOnAllDrives {
+    try {
+        $passwordCachePath = "$env:USERPROFILE\Documents\BitLockerPasswords.txt"
+
+        $bitlockerDrives = Get-BitLockerVolume | Where-Object { $_.ProtectionStatus -eq 1 }
+
+        if (-not $bitlockerDrives) {
+            Write-Host "No drives with BitLocker protection found." -ForegroundColor Yellow
+            return
+        }
+
+        Write-Host "Starting BitLocker deactivation on all drives..." -ForegroundColor Green
+
+        $totalDrives = $bitlockerDrives.Count
+        $progressCount = 0
+
+        foreach ($drive in $bitlockerDrives) {
+            $progressCount++
+            $percentComplete = [math]::Round(($progressCount / $totalDrives) * 100)
+
+            Write-Progress -Activity "Disabling BitLocker" `
+                           -Status "Processing drive: $($drive.MountPoint) ($progressCount of $totalDrives)" `
+                           -PercentComplete $percentComplete
+
+            Write-Host "Disabling BitLocker on drive $($drive.MountPoint)..." -ForegroundColor Cyan
+            try {
+                Disable-BitLocker -MountPoint $drive.MountPoint -ErrorAction Stop
+            } catch {
+                Write-Host "Failed to disable BitLocker on drive $($drive.MountPoint). Attempting manual decryption..." -ForegroundColor Yellow
+
+                # Check if a cached password is available
+                $cachedPassword = $null
+                if (Test-Path $passwordCachePath) {
+                    $cachedPasswords = Get-Content $passwordCachePath | ConvertFrom-Json -ErrorAction SilentlyContinue
+                    $cachedPassword = $cachedPasswords | Where-Object { $_.MountPoint -eq $drive.MountPoint } | Select-Object -ExpandProperty Password -ErrorAction SilentlyContinue
+                }
+
+                if (-not $cachedPassword) {
+                    # Prompt for the password if not cached
+                    Write-Host "No cached password found for drive $($drive.MountPoint)." -ForegroundColor Yellow
+                    $securePassword = Read-Host "Enter the password for drive $($drive.MountPoint)" -AsSecureString
+                    $plainPassword = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword))
+
+                    # Save the password to the cache file
+                    $newEntry = @{ MountPoint = $drive.MountPoint; Password = $plainPassword }
+                    $cachedPasswords += $newEntry
+                    $cachedPasswords | ConvertTo-Json | Set-Content $passwordCachePath -Encoding UTF8
+                    Write-Host "Password saved successfully for drive $($drive.MountPoint)." -ForegroundColor Green
+
+                    # Prompt for confirmation to continue
+                    $response = Show-CustomMessageBox -Message "Are you sure you want to disable Bitlocker?" `
+                        -Title "Confirmation" `
+                        -ButtonLayout "YesNo"
+
+                    if ($response -ne "Yes") {
+                        Write-Host "Operation cancelled by the user for drive $($drive.MountPoint)." -ForegroundColor Red
+                        return
+                    }
+                } else {
+                    $plainPassword = $cachedPassword
+                }
+
+                # Attempt to unlock the drive
+                try {
+                    Unlock-BitLocker -MountPoint $drive.MountPoint -Password (ConvertTo-SecureString $plainPassword -AsPlainText -Force)
+                    Write-Host "Drive $($drive.MountPoint) unlocked successfully." -ForegroundColor Green
+
+                    # Start decryption manually
+                    Resume-BitLocker -MountPoint $drive.MountPoint
+                    Write-Host "Decryption started for drive $($drive.MountPoint)." -ForegroundColor Green
+                } catch {
+                    Write-Host "Unable to unlock or decrypt drive $($drive.MountPoint): $_" -ForegroundColor Red
+                }
+            }
+        }
+
+        Write-Host "Waiting for decryption to complete..." -ForegroundColor Yellow
+
+        while ($bitlockerDrives | Where-Object { $_.EncryptionPercentage -lt 100 }) {
+            $bitlockerDrives = Get-BitLockerVolume | Where-Object { $_.ProtectionStatus -eq 0 -and $_.EncryptionPercentage -lt 100 }
+            
+            foreach ($drive in $bitlockerDrives) {
+                $percentComplete = $drive.EncryptionPercentage
+                Write-Progress -Activity "Decrypting Drives" `
+                               -Status "Decrypting drive: $($drive.MountPoint) ($percentComplete% complete)" `
+                               -PercentComplete $percentComplete
+            }
+
+            Start-Sleep -Seconds 5
+        }
+
+        # Clear progress bar
+        Write-Progress -Activity "Decrypting Drives" -Completed
+
+        Write-Host "BitLocker deactivation completed on all drives." -ForegroundColor Green
+    } catch {
+        Write-Host "An error occurred: $_" -ForegroundColor Red
+    }
 }
