@@ -30,14 +30,11 @@ function Get-DiskInfo {
                             $smartData = Get-CimInstance -Namespace "root\WMI" -ClassName "MSStorageDriver_FailurePredictStatus" |
                                 Where-Object { $_.InstanceName -match $diskNumber }
                         
-                            if ($smartData -and $smartData.PredictFailure -eq $false) {
-                                $healthPercentage = "100%"
-                            } elseif ($smartData -and $smartData.PredictFailure -eq $true) {
+                            if ($smartData -and $smartData.PredictFailure -eq $false) {$healthPercentage = "100%"} 
+                            elseif ($smartData -and $smartData.PredictFailure -eq $true) {
                                 $healthPercentage = "10%"
                                 $diskHealth = "Failing"
-                            } else {
-                                $healthPercentage = "Unknown%"
-                            }
+                            } else {$healthPercentage = "Unknown%"}
                         } catch {
                             # Handle 'Access Denied' or other errors
                             Write-Host "Access denied when querying SMART data for disk $diskNumber. Using alternative logic." -ForegroundColor Yellow
@@ -102,130 +99,6 @@ function Get-DiskInfo {
     return $Disks
 }
 
-
-function Get-SystemPowerInfo {
-    try {
-        # Check for power supply details
-        $powerSupplies = Get-CimInstance -ClassName Win32_PowerSupply -ErrorAction SilentlyContinue
-
-        if ($powerSupplies -and $powerSupplies.Count -gt 0) {
-            $powerInfo = $powerSupplies | ForEach-Object {
-                [PSCustomObject]@{
-                    Name       = $_.Name
-                    Status     = $_.Status
-                    Wattage    = if ($null -ne $_.RatedCapacity) { "$($_.RatedCapacity) W" } else { "Unknown" }
-                    PowerState = "Connected"
-                }
-            }
-            return $powerInfo
-        } else {
-            Write-Host "No power supply detected. Checking for battery information..." -ForegroundColor Yellow
-            return Get-BatteryInfo
-        }
-    } catch {
-        Write-Host "Access denied or error retrieving power supply information: $_" -ForegroundColor Red
-        return "Unable to retrieve power supply information."
-    }
-}
-
-
-function Get-BatteryInfo {
-    try {
-        # Attempt to fetch battery info using Win32_Battery
-        $batteries = Get-CimInstance -ClassName Win32_Battery -ErrorAction SilentlyContinue
-
-        # Fallback to Win32_PortableBattery if Win32_Battery returns nothing
-        if (-not $batteries -or $batteries.Count -eq 0) {
-            $batteries = Get-CimInstance -ClassName Win32_PortableBattery -ErrorAction SilentlyContinue
-        }
-
-        # Additional failsafe: Try WMI directly
-        if (-not $batteries -or $batteries.Count -eq 0) {
-            $batteries = Get-CimInstance -Query "SELECT * FROM Win32_Battery" -ErrorAction SilentlyContinue
-        }
-
-        # If we still have no results, return a descriptive error
-        if (-not $batteries -or $batteries.Count -eq 0) {
-            return "No batteries detected or accessible on this machine, even after multiple attempts."
-        }
-
-        # Map battery information to a formatted output
-        $batteryInfo = $batteries | ForEach-Object {
-            try {
-                [PSCustomObject]@{
-                    Name                   = $_.Name
-                    Status                 = $_.Status
-                    "Charge Remaining (%)" = if ($null -ne $_.EstimatedChargeRemaining) { "$($_.EstimatedChargeRemaining)%" } else { "N/A" }
-                    "Run Time (min)"       = if ($null -ne $_.EstimatedRunTime) { $_.EstimatedRunTime } else { "N/A" }
-                    Chemistry              = switch ($_.Chemistry) {
-                        1 { 'Other' }
-                        2 { 'Unknown' }
-                        3 { 'Lead Acid' }
-                        4 { 'Nickel Cadmium' }
-                        5 { 'Nickel Metal Hydride' }
-                        6 { 'Lithium-ion' }
-                        7 { 'Zinc Air' }
-                        8 { 'Lithium Polymer' }
-                        Default { 'Not Specified' }
-                    }
-                    "Health (%)"           = Measure-BatteryHealth -Battery $_
-                }
-            } catch {
-                # If data retrieval fails for a battery, return default values
-                [PSCustomObject]@{
-                    Name                   = "Unknown"
-                    Status                 = "Data Unavailable"
-                    "Charge Remaining (%)" = "N/A"
-                    "Run Time (min)"       = "N/A"
-                    Chemistry              = "N/A"
-                    "Health (%)"           = "Unknown"
-                }
-            }
-        }
-
-        # Output the battery information
-        return $batteryInfo
-    } catch {
-        # Handle errors during retrieval
-        return "An error occurred while retrieving battery information: $($_.Exception.Message)"
-    }
-}
-
-
-function Measure-BatteryHealth {
-    param (
-        [Parameter(Mandatory = $true)]
-        $Battery
-    )
-
-    try {
-        if ($Battery.DesignCapacity -and $Battery.FullChargeCapacity -and
-            $Battery.DesignCapacity -gt 0 -and $Battery.FullChargeCapacity -gt 0) {
-            return [math]::round(($Battery.FullChargeCapacity / $Battery.DesignCapacity) * 100, 2) + "%"
-        } else {
-            return "Unknown"
-        }
-    } catch {
-        return "Unknown"
-    }
-}
-
-# Main function to check power information
-function Get-SystemPower {
-    $powerSupplyInfo = Get-SystemPowerInfo
-
-    if ($powerSupplyInfo -is [string]) {
-        # If no power supply detected, check for batteries
-        Write-Host $powerSupplyInfo
-        $batteryInfo = Get-BatteryInfo
-        Write-Output $batteryInfo
-    } else {
-        # Display power supply information
-        Write-Output $powerSupplyInfo
-    }
-}
-
-# Define helper functions for specific tasks
 function Get-TotalSticksRam {
     return [math]::round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
 }
@@ -250,9 +123,7 @@ function Get-ActivationDetails {
         $ActivationRaw = cscript /nologo $env:SystemRoot\System32\slmgr.vbs /dli | Select-String -Pattern "(License Status|Estado da Licen[çc]a|Estado da Ativa[çc][ãa]o):.+"
         $ActivationStatus = if ($ActivationRaw) {
             $ActivationRaw -replace "(License Status|Estado da Licen[çc]a|Estado da Ativa[çc][ãa]o): "
-        } else {
-            throw "Primary method failed"
-        }
+        } else {throw "Primary method failed"}
     
         # Fetch license type
         $LicenseTypeRaw = cscript /nologo $env:SystemRoot\System32\slmgr.vbs /dli | Select-String -Pattern "(Retail|OEM|Volume|Subscription|Evaluation|Academic|NFR|Upgrade|COEM|Pre-release|Enterprise|Insider|Education|Trial|MSDN|Insider|Provisória|Subscrip[çc][ãa]o|Avalia[çc][ãa]o|Acad[êe]mica|Ensino|Não Para Revenda)"
@@ -370,17 +241,13 @@ function Show-WindowsProductKeys {
     try {
         # Function to decode the product key
         function Convert-Key {
-            param (
-                [byte[]]$DigitalProductId
-            )
+            param ([byte[]]$DigitalProductId)
             $keyChars = "BCDFGHJKMPQRTVWXY2346789"
             $decodedKey = ""
             $key = New-Object 'System.Collections.Generic.List[System.Byte]'
 
             # Initialize the key array from DigitalProductId
-            for ($i = 52; $i -ge 52 - 15; $i--) {
-                $key.Add($DigitalProductId[$i])
-            }
+            for ($i = 52; $i -ge 52 - 15; $i--) {$key.Add($DigitalProductId[$i])}
 
             # Decode the key
             for ($i = 0; $i -lt 25; $i++) {
@@ -394,9 +261,7 @@ function Show-WindowsProductKeys {
             }
 
             # Ensure the key is valid and contains 25 characters
-            if ($decodedKey.Length -ne 25) {
-                throw "Decoded product key length is invalid: $($decodedKey.Length)"
-            }
+            if ($decodedKey.Length -ne 25) {throw "Decoded product key length is invalid: $($decodedKey.Length)"}
 
             # Insert dashes for readability
             $decodedKey = $decodedKey.Substring(0, 5) + "-" +
@@ -407,26 +272,27 @@ function Show-WindowsProductKeys {
             return $decodedKey
         }
 
-        # Retrieve installed product key
-        $digitalProductId = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").DigitalProductId
-        if (-not $digitalProductId) {
-            throw "DigitalProductId not found in the registry."
-        }
+        # Attempt to retrieve installed product key
+        $digitalProductId = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -ErrorAction SilentlyContinue).DigitalProductId
+        $installedKey = $null
 
-        $installedKey = Convert-Key -DigitalProductId $digitalProductId
+        if ($digitalProductId) {
+            $installedKey = Convert-Key -DigitalProductId $digitalProductId
+        } else {
+            # Fallback methods
+            $installedKey = "Not Found"
+        }
 
         # Retrieve OEM key if available
-        $oemKey = (Get-CimInstance -ClassName SoftwareLicensingService).OA3xOriginalProductKey
+        $oemKey = (Get-CimInstance -ClassName SoftwareLicensingService -ErrorAction SilentlyContinue).OA3xOriginalProductKey
 
         # Determine color for keys
-        $installedKeyColor = if ($installedKey -ne "Error") { "Yellow" } else { "Red" }
-        $oemKeyColor = if ($oemKey -eq "Not Found") {
-            "Yellow"
-        } elseif ($oemKey -eq "Error") {
-            "Red"
-        } else {
-            "Green"
-        }
+        $installedKeyColor = if ($installedKey -ne "Not Found") { "Yellow" } else { "Red" }
+        $oemKeyColor = if ($oemKey -eq "Not Found") {"Yellow"} elseif ($oemKey -eq "Error") {"Red"} else {"Green"}
+
+        # Ensure valid colors
+        if (-not ([Enum]::IsDefined([System.ConsoleColor], $installedKeyColor))) {$installedKeyColor = "Gray"}
+        if (-not ([Enum]::IsDefined([System.ConsoleColor], $oemKeyColor))) {$oemKeyColor = "Gray"}
 
         # Return the results with color metadata
         return [PSCustomObject]@{
@@ -508,52 +374,41 @@ function Get-CameraAndOpenApp {
     }
 }
 
-
-
 function Get-SystemInfo {
-    # Display a message to indicate the start of information gathering
-    Write-Host "`nRefreshing System Information..." -ForegroundColor Yellow
+    Write-Host "`nRefreshing System Information..." -ForegroundColor Yellow    
+    Write-Host "`n***** If stuck press ENTER *****" -ForegroundColor Red
 
-    # Define the tasks to gather system information
     $tasks = @(
-        { return Get-TotalSticksRam },
-        { return Get-ProcessorInfo },
-        { return Get-GPUInfo },
-        { return Get-WindowsVersion },
-        { return Get-ActivationDetails },
-        { return Show-WindowsProductKeys },
-        { return Get-DiskInfo }
+        @{ Name = "Memory Info"; Task = { Get-TotalSticksRam } },
+        @{ Name = "Processor Info"; Task = { Get-ProcessorInfo } },
+        @{ Name = "GPU Info"; Task = { Get-GPUInfo } },
+        @{ Name = "Windows Version"; Task = { Get-WindowsVersion } },
+        @{ Name = "Activation Details"; Task = { Get-ActivationDetails } },
+        @{ Name = "System Product Keys"; Task = { Show-WindowsProductKeys } },
+        @{ Name = "Disk Info"; Task = { Get-DiskInfo } }
     )
+    $totalTasks = $tasks.Count
+    $results = @()
+    for ($i = 0; $i -lt $totalTasks; $i++) {
+        $taskName = $tasks[$i].Name
+        $task = $tasks[$i].Task
 
-    # Collect the results by invoking each task
-    $results = $tasks | ForEach-Object { &$_ }
-    # Map results to respective variables
+        $percentComplete = [math]::Round((($i + 1) / $totalTasks) * 100)
+        Write-Progress -Activity "> System Information >>>>>>>>" `
+                       -Status "Processing: $taskName ($($i + 1) of $totalTasks)" `
+                       -PercentComplete $percentComplete
+        $results += & $task
+    }
+    Write-Progress -Activity "System Information Completed" -Completed
+    Clear-Host
+
     $MemoryInfo, $CPUInfo, $GPUInfo, $WindowsStatus, $ActivationStatus, $ProductKeys, $DiskInfo = $results
 
-    # Determine colors for CPU, GPU, and activation status
-    $ActivationColor = if ($ActivationStatus -match "Licensed|Licenciado") { 
-        "Green" 
-    } else { 
-        "Red" 
-    }
+    $ActivationColor = if ($ActivationStatus -match "Licensed|Licenciado") { "Green" } else { "Red" }
     
-    $CPUColor = if ($CPUInfo -match "AMD") { 
-        "Red" 
-    } elseif ($CPUInfo -match "Intel") { 
-        "Cyan" 
-    } else { 
-        "Blue" # Default fallback for unexpected CPUInfo
-    }
+    $CPUColor = if ($CPUInfo -match "AMD") { "Red" } elseif ($CPUInfo -match "Intel") { "Cyan" } else { "Blue" }
     
-    $GPUColor = if ($GPUInfo -match "NVIDIA") { 
-        "Green" 
-    } elseif ($GPUInfo -match "AMD") { 
-        "Red" 
-    } elseif ($GPUInfo -match "Intel") { 
-        "Cyan" 
-    } else { 
-        "Gray" # Default fallback for unexpected GPUInfo
-    }
+    $GPUColor = if ($GPUInfo -match "NVIDIA") { "Green" } elseif ($GPUInfo -match "AMD") { "Red" } elseif ($GPUInfo -match "Intel") { "Cyan" } else { "Gray" }
 
     # Create a PSCustomObject to return the system information
     return [PSCustomObject]@{
