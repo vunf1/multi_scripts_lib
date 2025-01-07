@@ -20,13 +20,6 @@ if ($PSScriptRoot) {
     . "./TweaksSystem.ps1"
 }
 
-
-
-# Running the activation script
-function Start-ActivationScript {
-    Start-Command -Command "irm https://get.activated.win | iex"
-}
-
 # Running memtest Windows Built in and create task to dispaly data after boot
 function Start-MemoryDiagnosticWithTask {
     try {
@@ -39,9 +32,30 @@ function Start-MemoryDiagnosticWithTask {
 }
 
 
-function Show-SystemInfo {
+function Show-SystemInfo {    
+    param (
+    [string]$Command = "default"  # Accepts 'update' as a parameter
+    )
     Clear-Host
-    $global:SystemInfoData = Get-SystemInfo
+
+    # If 'update' parameter is passed, update the global data
+    if ($Command -eq "update") {
+        Write-Host "Checking for updates to System Information..." -ForegroundColor Yellow
+        $newData = Get-SystemInfo
+
+        if ($global:SystemInfoData -and ($global:SystemInfoData | ConvertTo-Json -Depth 10) -eq ($newData | ConvertTo-Json -Depth 10)) {
+            Write-Host "No changes detected in System Information." -ForegroundColor Cyan
+        } else {
+            Write-Host "Updating System Information..." -ForegroundColor Green
+            $global:SystemInfoData = $newData
+        }
+    }
+    Clear-Host
+
+    # If the global variable is not initialized, fetch system info
+    if (-not $global:SystemInfoData) {
+        $global:SystemInfoData = Get-SystemInfo
+    }
     Clear-Host
     # Explicitly reference $global:SystemInfoData
     $data = $global:SystemInfoData
@@ -81,79 +95,180 @@ Start-Files
 Get-CameraAndOpenApp
 Show-YouTubeIframe
 Show-SystemInfo
-
-function Show-DisplayMenu {
-    Write-Host "`nChoose an option - 0 to EXIT:" -ForegroundColor Yellow
-    Write-Host "1. Refresh System Information"
-    Write-Host "2. Drivers Links"
-    Write-Host "3. Keyboard Test"
-    Write-Host "4. Cache Clean"
-    Write-Host "5. TWEAK - Display Not coming back when Suspended"
-    Write-Host "6. Microsoft Activation Helper"
-    Write-Host "7. Test Memory Windows - Restart Required"
-    Write-Host "8. Register OEM Key"
+# Main Menu
+function Show-MainMenu {
+    Write-Host "`nMain Menu - Choose an option (0 to EXIT):" -ForegroundColor Yellow
+    Write-Host "1. System Information & Tweaks"
+    Write-Host "2. Drivers and Tools"
+    Write-Host "3. System Maintenance"
     Write-Host "0. Exit"
     Write-Host " "
 }
-Show-DisplayMenu
-function KeyPressOption {
+
+function MainMenuOption {
     param ([ConsoleKeyInfo]$Key)
     switch ($Key.KeyChar) {
-        "1" { 
-            Show-SystemInfo
-            Show-DisplayMenu 
-            Write-Host "`nOption 1 executed: System Information refreshed." -ForegroundColor Green
-        }
-        "2" { 
-            Show-DriverPage 
-            Write-Host "`nOption 2 executed: Drivers Links displayed." -ForegroundColor Green
-        }
-        "3" { 
-            Start-Files 
-            Write-Host "`nOption 3 executed: Keyboard Test started." -ForegroundColor Green
-        }
-        "4" { 
-            Clear-SystemCache 
-            Write-Host "`nOption 4 executed: Cache cleared." -ForegroundColor Green
-        }
-        "5" { 
-            Use-ConfigurePowerSettings 
-            Write-Host "`nOption 5 executed: Power settings configured." -ForegroundColor Green
-        }
-        "6" { 
-            Start-ActivationScript 
-            Write-Host "`nOption 6 executed: Activation script started." -ForegroundColor Green
-        }
-        "7" { 
-            Start-MemoryDiagnosticWithTask 
-            Write-Host "`nOption 7 executed: Memory diagnostic started. System may restart." -ForegroundColor Green
-        }
-        "8" {
-            $response = Show-CustomMessageBox -Message "Do you want to register OEM Key?" `
-            -Title "Confirmation" `
-            -ButtonLayout "YesNo" 
-            
-            if ($response -eq "Yes") {
-                Register-OEMKey
-                Write-Host "`nOption 8 executed: Starting to Register OEM key to System." -ForegroundColor Green
-            }else {
-                Write-Host "Operation cancelled by user." -ForegroundColor Red
-            }
-        }
+        "1" { Show-SystemInfoSubmenu }
+        "2" { Show-DriversToolsSubmenu }
+        "3" { Show-MaintenanceSubmenu }
         "0" { 
             Write-Host "`nExiting the program. Goodbye!" -ForegroundColor Red
-            exit 
+            exit
+        }
+    }
+}
+
+# System Information & Tweaks Menu
+function Show-SystemInfoMenu {
+    Clear-Host
+    Show-SystemInfo
+    Write-Host "`nSystem Information & Tweaks - Choose an option:" -ForegroundColor Yellow
+    Write-Host "1. Refresh System Information"
+    Write-Host "2. TWEAK - Display Not coming back when Suspended"
+    Write-Host "3. Microsoft Activation Helper"
+    Write-Host "4. Register OEM Key"
+    Write-Host "0. Back to Main Menu"
+    Write-Host " "
+}
+
+function SystemInfoOption {
+    param ([ConsoleKeyInfo]$Key)
+    switch ($Key.KeyChar) {
+        "1" {
+            Write-Host "`nRefreshing System Information..." -ForegroundColor Green
+            Show-SystemInfo -Command "update"
+        }
+        "2" {
+            Write-Host "`nConfiguring Display Power Settings..." -ForegroundColor Green
+            Use-ConfigurePowerSettings
+        }
+        "3" {
+            Write-Host "`nStarting Activation Helper..." -ForegroundColor Green
+            if (Get-Command Start-ActivationScript -ErrorAction SilentlyContinue) {
+                Write-Host "Start-ActivationScript recognized."
+            } else {
+                Write-Host "Start-ActivationScript not recognized." -ForegroundColor Red
+            }
+            Start-ActivationScript
+        }
+        "4" {
+            Write-Host "`nRegistering OEM Key..." -ForegroundColor Green
+            Register-OEMKey
+        }
+        "0" {
+            Clear-Host
+            Show-SystemInfo
+             return }
+    }
+}
+
+function Show-SystemInfoSubmenu {
+    while ($true) {
+        Show-SystemInfoMenu
+        $key = [System.Console]::ReadKey($true)
+        if ($key.KeyChar -match '^[0-4]$') {
+            SystemInfoOption $key
+            if ($key.KeyChar -eq "0") { break }
+        }
+    }
+}
+
+# Drivers and Tools Menu
+function Show-DriversToolsMenu {
+    Clear-Host
+    Show-SystemInfo
+    Write-Host "`nDrivers and Tools - Choose an option:" -ForegroundColor Yellow
+    Write-Host "1. Drivers Links"
+    Write-Host "2. Keyboard Test"
+    Write-Host "3. Battery Test"
+    Write-Host "4. Audio Test"
+    Write-Host "0. Back to Main Menu"
+    Write-Host " "
+}
+
+function DriversToolsOption {
+    param ([ConsoleKeyInfo]$Key)
+    switch ($Key.KeyChar) {
+        "1" {
+            Write-Host "`nDisplaying Drivers Links..." -ForegroundColor Green
+            Show-DriverPage
+        }
+        "2" {
+            Write-Host "`nStarting Keyboard Test..." -ForegroundColor Green
+            Open-Executable -Key "Keyboard"
+        }
+        "3" {
+            Write-Host "`nStarting Battery Test..." -ForegroundColor Green
+            Open-Executable -Key "Battery"
+        }
+        "4" {
+            Write-Host "`nStarting Audio Test..." -ForegroundColor Green
+            Show-YouTubeIframe
+        }
+        "0" { 
+            Clear-Host
+            Show-SystemInfo
+            return }
+    }
+}
+
+function Show-DriversToolsSubmenu {
+    while ($true) {
+        Show-DriversToolsMenu
+        $key = [System.Console]::ReadKey($true)
+        if ($key.KeyChar -match '^[0-4]$') {
+            DriversToolsOption $key
+            if ($key.KeyChar -eq "0") { break }
+        }
+    }
+}
+
+# System Maintenance Menu
+function Show-MaintenanceMenu {
+    Clear-Host
+    Show-SystemInfo
+    Write-Host "`nSystem Maintenance - Choose an option:" -ForegroundColor Yellow
+    Write-Host "1. Cache Clean"
+    Write-Host "2. Test Memory Windows - Restart Required"
+    Write-Host "0. Back to Main Menu"
+    Write-Host " "
+}
+
+function MaintenanceOption {
+    param ([ConsoleKeyInfo]$Key)
+    switch ($Key.KeyChar) {
+        "1" {
+            Write-Host "`nClearing Cache..." -ForegroundColor Green
+            Clear-SystemCache
+        }
+        "2" {
+            Write-Host "`nStarting Memory Diagnostic..." -ForegroundColor Green
+            Start-MemoryDiagnosticWithTask
+        }
+        "0" { 
+            Clear-Host
+            Show-SystemInfo
+            return }
+    }
+}
+
+function Show-MaintenanceSubmenu {
+    while ($true) {
+        Show-MaintenanceMenu
+        $key = [System.Console]::ReadKey($true)
+        if ($key.KeyChar -match '^[0-2]$') {
+            MaintenanceOption $key
+            if ($key.KeyChar -eq "0") { break }
         }
     }
 }
 
 
-# Loop to handle user input
+# Main Loop
 while ($true) {
+    Show-MainMenu
     $key = [System.Console]::ReadKey($true)
-
-    if ($key.KeyChar -match '^[0-7]$') {
-        KeyPressOption $key
-        # Re-display the menu after handling the choice
+    if ($key.KeyChar -match '^[0-3]$') {
+        MainMenuOption $key
     }
 }
