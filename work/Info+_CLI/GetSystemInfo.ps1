@@ -247,7 +247,7 @@ function Show-WindowsProductKeys {
             $key = New-Object 'System.Collections.Generic.List[System.Byte]'
 
             # Initialize the key array from DigitalProductId
-            for ($i = 52; $i -ge 52 - 15; $i--) {$key.Add($DigitalProductId[$i])}
+            for ($i = 52; $i -ge 52 - 15; $i--) { $key.Add($DigitalProductId[$i]) }
 
             # Decode the key
             for ($i = 0; $i -lt 25; $i++) {
@@ -260,8 +260,7 @@ function Show-WindowsProductKeys {
                 $decodedKey = $keyChars[$current] + $decodedKey
             }
 
-            # Ensure the key is valid and contains 25 characters
-            if ($decodedKey.Length -ne 25) {throw "Decoded product key length is invalid: $($decodedKey.Length)"}
+            if ($decodedKey.Length -ne 25) { throw "Decoded product key length is invalid: $($decodedKey.Length)" }
 
             # Insert dashes for readability
             $decodedKey = $decodedKey.Substring(0, 5) + "-" +
@@ -279,20 +278,40 @@ function Show-WindowsProductKeys {
         if ($digitalProductId) {
             $installedKey = Convert-Key -DigitalProductId $digitalProductId
         } else {
-            # Fallback methods
-            $installedKey = "Not Found"
+            # Fallback: Try querying using WMI (Win32_ComputerSystemSoftwareLicensing)
+            try {
+                $installedKey = (Get-CimInstance -Query "SELECT * FROM SoftwareLicensingProduct WHERE PartialProductKey IS NOT NULL AND LicenseStatus=1").PartialProductKey
+                $installedKey = if ($installedKey) { "XXXXX-XXXXX-XXXXX-XXXXX-$installedKey" } else { "Not Found" }
+            } catch {
+                $installedKey = "Not Found"
+            }
         }
 
         # Retrieve OEM key if available
-        $oemKey = (Get-CimInstance -ClassName SoftwareLicensingService -ErrorAction SilentlyContinue).OA3xOriginalProductKey
+        $oemKey = $null
+        try {
+            $oemKey = (Get-CimInstance -ClassName SoftwareLicensingService -ErrorAction SilentlyContinue).OA3xOriginalProductKey
+            if (-not $oemKey) {
+                throw "Primary method for retrieving OEM key failed."
+            }
+        } catch {
+            # Fallback: Use slmgr.vbs to fetch OEM key
+            try {
+                $oemKeyOutput = cscript.exe "$env:SystemRoot\System32\slmgr.vbs" /dli | Out-String
+                $oemKey = ($oemKeyOutput -split "`n") -match "OA3xOriginalProductKey" | ForEach-Object { ($_ -split ":")[1].Trim() }
+                if (-not $oemKey) { $oemKey = "Not Found" }
+            } catch {
+                $oemKey = "Not Found"
+            }
+        }
 
-        # Determine color for keys
+        # Assign colors with validation
         $installedKeyColor = if ($installedKey -ne "Not Found") { "Yellow" } else { "Red" }
-        $oemKeyColor = if ($oemKey -eq "Not Found") {"Yellow"} elseif ($oemKey -eq "Error") {"Red"} else {"Green"}
+        $oemKeyColor = if ($oemKey -eq "Not Found") { "Yellow" } elseif ($oemKey -eq "Error") { "Red" } else { "Green" }
 
-        # Ensure valid colors
-        if (-not ([Enum]::IsDefined([System.ConsoleColor], $installedKeyColor))) {$installedKeyColor = "Gray"}
-        if (-not ([Enum]::IsDefined([System.ConsoleColor], $oemKeyColor))) {$oemKeyColor = "Gray"}
+        # Validate colors and set default if invalid
+        $installedKeyColor = if ([Enum]::IsDefined([System.ConsoleColor], $installedKeyColor)) { $installedKeyColor } else { "Red" }
+        $oemKeyColor = if ([Enum]::IsDefined([System.ConsoleColor], $oemKeyColor)) { $oemKeyColor } else { "Red" }
 
         # Return the results with color metadata
         return [PSCustomObject]@{
@@ -314,8 +333,11 @@ function Show-WindowsProductKeys {
     }
 }
 
+
 function Get-CameraAndOpenApp {
     try {
+        Write-Host "Checking for camera devices..." -ForegroundColor Yellow
+
         # Check for camera devices using the Win32_PnPEntity class
         $cameraDevices = Get-CimInstance -ClassName Win32_PnPEntity | Where-Object {
             $_.Name -match "Camera|Webcam|Imaging Device" -or $_.PNPClass -eq "Image"
@@ -326,57 +348,64 @@ function Get-CameraAndOpenApp {
             $cameraDevices | ForEach-Object {
                 Write-Host "Name: $($_.Name)"
             }
-
-            # Attempt to open the default camera app
-            try {
-                Start-Process -FilePath "microsoft.windows.camera:"
-                Write-Host "Opening the default Camera app..." -ForegroundColor Green
-            } catch {
-                Write-Host "Default Camera app launch failed. Attempting fallback options..." -ForegroundColor Yellow
-                
-                # Fallback 1: Use explorer with URI
-                try {
-                    Start-Process -FilePath "explorer.exe" -ArgumentList "microsoft.windows.camera:"
-                    Write-Host "Fallback: Opened Camera app via explorer.exe." -ForegroundColor Green
-                } catch {
-                    Write-Host "Fallback 1 failed: Could not open Camera app via explorer." -ForegroundColor Red
-                    
-                    # Fallback 2: Launch directly from package path
-                    try {
-                        $cameraPath = "C:\Windows\SystemApps\Microsoft.WindowsCamera_cw5n1h2txyewy\WindowsCamera.exe"
-                        if (Test-Path $cameraPath) {
-                            Start-Process -FilePath $cameraPath
-                            Write-Host "Fallback: Opened Camera app directly from package path." -ForegroundColor Green
-                        } else {
-                            Write-Host "Fallback 2 failed: Camera app not found in the expected path." -ForegroundColor Red
-                        }
-                    } catch {
-                        Write-Host "Fallback 2 failed: Unable to launch Camera app from package path." -ForegroundColor Red
-                        
-                        # Fallback 3: Open shell AppsFolder
-                        try {
-                            Start-Process -FilePath "shell:AppsFolder\Microsoft.WindowsCamera_cw5n1h2txyewy!App"
-                            Write-Host "Fallback: Opened Camera app using shell:AppsFolder." -ForegroundColor Green
-                        } catch {
-                            Write-Host "Fallback 3 failed: Could not open Camera app using shell:AppsFolder." -ForegroundColor Red
-                            
-                            # Fallback 4: Suggest alternatives
-                            Write-Host "Unable to open the Camera app. Consider using a third-party application or online tools like https://webcamtests.com." -ForegroundColor Red
-                        }
-                    }
-                }
-            }
         } else {
-            Write-Host "No camera driver detected on this machine." -ForegroundColor Red
+            Write-Host "No camera driver detected on this machine. Proceeding to open the Camera app..." -ForegroundColor Yellow
+        }
+
+        # Attempt to open the default Camera app
+        try {
+            Start-Process -FilePath "microsoft.windows.camera:"
+            Write-Host "Opening the default Camera app..." -ForegroundColor Green
+        } catch {
+            Write-Host "Default Camera app launch failed. Attempting fallback options..." -ForegroundColor Yellow
+
+            # Fallbacks
+            if (-not (Open-CameraFallback)) {
+                Write-Host "All attempts to open the Camera app failed. Consider using an alternative application." -ForegroundColor Red
+            }
         }
     } catch {
         Write-Host "An error occurred while checking for camera drivers: $_" -ForegroundColor Red
     }
 }
+function Open-CameraFallback {
+    try {
+        # Fallback 1: Use explorer with URI
+        Start-Process -FilePath "explorer.exe" -ArgumentList "microsoft.windows.camera:"
+        Write-Host "Fallback: Opened Camera app via explorer.exe." -ForegroundColor Green
+        return $true
+    } catch {
+        Write-Host "Fallback 1 failed: Could not open Camera app via explorer." -ForegroundColor Red
+    }
+
+    try {
+        # Fallback 2: Launch directly from package path
+        $cameraPath = "C:\Windows\SystemApps\Microsoft.WindowsCamera_cw5n1h2txyewy\WindowsCamera.exe"
+        if (Test-Path $cameraPath) {
+            Start-Process -FilePath $cameraPath
+            Write-Host "Fallback: Opened Camera app directly from package path." -ForegroundColor Green
+            return $true
+        } else {
+            Write-Host "Fallback 2 failed: Camera app not found in the expected path." -ForegroundColor Red
+        }
+    } catch {
+        Write-Host "Fallback 2 failed: Unable to launch Camera app from package path." -ForegroundColor Red
+    }
+
+    try {
+        # Fallback 3: Open shell AppsFolder
+        Start-Process -FilePath "shell:AppsFolder\Microsoft.WindowsCamera_cw5n1h2txyewy!App"
+        Write-Host "Fallback: Opened Camera app using shell:AppsFolder." -ForegroundColor Green
+        return $true
+    } catch {
+        Write-Host "Fallback 3 failed: Could not open Camera app using shell:AppsFolder." -ForegroundColor Red
+    }
+    return $false
+}
+
 
 function Get-SystemInfo {
-    Write-Host "`nRefreshing System Information..." -ForegroundColor Yellow    
-    Write-Host "`n***** If stuck press ENTER *****" -ForegroundColor Red
+    Write-Host "`n***** If stuck press ENTER *****" -ForegroundColor Red -NoNewline; Write-Host " `nRefreshing System Information..." -ForegroundColor Yellow # Sencond line is been cover by progressbar
 
     $tasks = @(
         @{ Name = "Memory Info"; Task = { Get-TotalSticksRam } },
