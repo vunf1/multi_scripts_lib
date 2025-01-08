@@ -165,11 +165,12 @@ function SystemInfoOption {
 function Show-SystemInfoSubmenu {
     while ($true) {
         Show-SystemInfoMenu
-        $key = [System.Console]::ReadKey($true)
-        if ($key.KeyChar -match '^[0-4]$') {
-            SystemInfoOption $key
-            if ($key.KeyChar -eq "0") { break }
-        }
+        do {
+            $key = [System.Console]::ReadKey($true)
+        } while (-not ($key.KeyChar -match '^[0-4]$'))  # Only accept valid input
+
+        SystemInfoOption $key
+        if ($key.KeyChar -eq "0") { break }
     }
 }
 
@@ -215,11 +216,12 @@ function DriversToolsOption {
 function Show-DriversToolsSubmenu {
     while ($true) {
         Show-DriversToolsMenu
-        $key = [System.Console]::ReadKey($true)
-        if ($key.KeyChar -match '^[0-4]$') {
-            DriversToolsOption $key
-            if ($key.KeyChar -eq "0") { break }
-        }
+        do {
+            $key = [System.Console]::ReadKey($true)
+        } while (-not ($key.KeyChar -match '^[0-4]$'))  # Only accept valid input
+
+        DriversToolsOption $key
+        if ($key.KeyChar -eq "0") { break }
     }
 }
 
@@ -255,20 +257,23 @@ function MaintenanceOption {
 function Show-MaintenanceSubmenu {
     while ($true) {
         Show-MaintenanceMenu
-        $key = [System.Console]::ReadKey($true)
-        if ($key.KeyChar -match '^[0-2]$') {
-            MaintenanceOption $key
-            if ($key.KeyChar -eq "0") { break }
-        }
+        do {
+            $key = [System.Console]::ReadKey($true)
+        } while (-not ($key.KeyChar -match '^[0-2]$'))  # Only accept valid input
+
+        MaintenanceOption $key
+        if ($key.KeyChar -eq "0") { break }
     }
 }
 
 
 # Main Loop
+# Main Loop
 while ($true) {
     Show-MainMenu
-    $key = [System.Console]::ReadKey($true)
-    if ($key.KeyChar -match '^[0-3]$') {
-        MainMenuOption $key
-    }
+    do {
+        $key = [System.Console]::ReadKey($true)
+    } while (-not ($key.KeyChar -match '^[0-3]$'))  # Only accept valid input
+
+    MainMenuOption $key
 }
