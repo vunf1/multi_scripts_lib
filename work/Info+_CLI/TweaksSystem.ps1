@@ -73,7 +73,9 @@ function Use-ConfigurePowerSettings {
     Write-Host "Screensaver set to blank with a timer of 5 minutes." -ForegroundColor Green
 
     Write-Host "Power settings configured successfully." -ForegroundColor Green
-}function Register-OEMKey {
+}
+
+function Register-OEMKey {
     try {
         # Retrieve the OEM key
         $oemKey = (Get-CimInstance -ClassName SoftwareLicensingService).OA3xOriginalProductKey
@@ -135,11 +137,17 @@ function Use-ConfigurePowerSettings {
 
 function Start-ActivationScript {
     try {
+        
         $scriptContent = Invoke-RestMethod -Uri "https://get.activated.win"
+
         $scriptBlock = [ScriptBlock]::Create($scriptContent)
-        $job = Start-Job -ScriptBlock $scriptBlock
-        Write-Host "Activation Script is running in the background (Job ID: $($job.Id))." -ForegroundColor Green
+
+        Write-Host "Executing Activation Script..." -ForegroundColor Green
+        Invoke-Command -ScriptBlock $scriptBlock
+
+        Write-Host "Activation Script executed successfully." -ForegroundColor Green
     } catch {
-        Write-Host "An error occurred while starting the Activation Script: $_" -ForegroundColor Red
+        Write-Host "An error occurred while fetching or executing the Activation Script: $_" -ForegroundColor Red
     }
 }
+
