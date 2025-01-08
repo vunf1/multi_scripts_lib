@@ -18,6 +18,9 @@
         CompanyName = 'Maia'
         InternalName = 'InfoPlusApp'
         OriginalFilename = 'InfoPlus.exe'
+        Publisher = 'Vunf1'  
+        SupportURL = 'https://github.com/vunf1/'  
+    
     }
     Bundle = @{
         Enabled = $true

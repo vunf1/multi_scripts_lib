@@ -16,7 +16,7 @@ if (Test-Path $envPath) {
 
     # Check if the password is loaded
     if (-not $passwordPlainText) {
-        Write-Error "Password not found in .env file. Please add a PASSWORD variable."
+        Write-Error "Password not found in .env file. Please add a PASSWORD variable. And chance package.psd1 to the correct password."
         exit 1
     }
 
@@ -24,7 +24,7 @@ if (Test-Path $envPath) {
     $securePassword = ConvertTo-SecureString -String $passwordPlainText -AsPlainText -Force
 
     # Generate a self-signed certificate
-    $cert = New-SelfSignedCertificate -DnsName "HardStockApp" -CertStoreLocation "Cert:\CurrentUser\My" -NotAfter (Get-Date).AddYears(1)
+    $cert = New-SelfSignedCertificate -DnsName "main" -CertStoreLocation "Cert:\CurrentUser\My" -NotAfter (Get-Date).AddYears(1)
 
     # Export the certificate
     $outputPath = Join-Path -Path $PSScriptRoot -ChildPath "MyCert.pfx"
