@@ -5,7 +5,7 @@ Add-Type -AssemblyName System.Windows.Forms
 $host.UI.RawUI.WindowTitle = "Info+"
 #$host.UI.RawUI.BufferSize = New-Object -TypeName System.Management.Automation.Host.Size(1, 10)
 $host.UI.RawUI.BackgroundColor = "Black"
-if ($PSScriptRoot) {
+<# if ($PSScriptRoot) {
     # Load dependent scripts from the current directory during development
     . "$PSScriptRoot\CustomMessageBox.ps1"
     . "$PSScriptRoot\DriversTest.ps1"
@@ -20,7 +20,7 @@ if ($PSScriptRoot) {
     . "./CommandHelpers.ps1"
     . "./GetSystemInfo.ps1"
     . "./TweaksSystem.ps1"
-}
+} #>
 
 function Start-MemoryDiagnosticWithTask {
     try {

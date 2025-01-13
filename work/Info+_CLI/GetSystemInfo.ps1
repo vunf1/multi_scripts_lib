@@ -125,8 +125,9 @@ function Get-ProcessorInfo {
 
 function Get-GPUInfo {
     try {
+
         $gpus = Get-CimInstance -ClassName Win32_VideoController -ErrorAction SilentlyContinue | ForEach-Object {
-            # Determine if the GPU is dedicated or integrated
+
             $isDedicated = if ($_.AdapterRAM -and $_.AdapterRAM -gt 0) { 
                 "Dedicated" 
             } elseif ($_.AdapterCompatibility -match "Intel|AMD") {
@@ -138,11 +139,16 @@ function Get-GPUInfo {
             } else { 
                 "Unknown" 
             }
-
-            # Assign color based on GPU name
-            $gpuColor = if ($_.Caption -match "NVIDIA") { "Green" } `
-                        elseif ($_.Caption -match "AMD") { "Red" } `
-                        elseif ($_.Caption -match "Intel") { "Cyan" } else { "Gray" }
+            
+            $gpuColor = if ($_.Caption -match "NVIDIA") { 
+                "Green" 
+            } elseif ($_.Caption -match "AMD") { 
+                "Red" 
+            } elseif ($_.Caption -match "Intel") { 
+                "Cyan" 
+            } else { 
+                "Gray" 
+            }
 
             [PSCustomObject]@{
                 Name       = $_.Caption.Trim()
@@ -151,19 +157,20 @@ function Get-GPUInfo {
             }
         }
 
-        # If GPUs are found, return them as a list
-        if ($gpus -and $gpus.Count -gt 0) {
+        # Explicitly ensure $gpus is treated as an array
+        $gpus = @($gpus)
+
+        if ($gpus.Count -gt 0) {
             return [PSCustomObject]@{
                 GPUs = $gpus
             }
         } else {
-            # Return a default object if no GPUs are found
+            Write-Host "No GPUs detected on this system."
             return [PSCustomObject]@{
                 GPUs = @([PSCustomObject]@{ Name = "No GPU Found"; Dedicated = "N/A"; Color = "Gray" })
             }
         }
     } catch {
-        # Handle any errors and return a default object
         return [PSCustomObject]@{
             GPUs = @([PSCustomObject]@{ Name = "Error Retrieving GPU Info"; Dedicated = "N/A"; Color = "Red" })
         }
@@ -212,9 +219,11 @@ function Show-WindowsProductKeys {
             param ([byte[]]$DigitalProductId)
             $keyChars = "BCDFGHJKMPQRTVWXY2346789"
             $decodedKey = ""
-            $key = New-Object 'System.Collections.Generic.List[System.Byte]'
+            $key = [System.Collections.Generic.List[byte]]::new()
+        
             # Initialize the key array from DigitalProductId
             for ($i = 52; $i -ge 52 - 15; $i--) { $key.Add($DigitalProductId[$i]) }
+        
             # Decode the key
             for ($i = 0; $i -lt 25; $i++) {
                 $current = 0
@@ -225,67 +234,63 @@ function Show-WindowsProductKeys {
                 }
                 $decodedKey = $keyChars[$current] + $decodedKey
             }
-
-            if ($decodedKey.Length -ne 25) { throw "Decoded product key length is invalid: $($decodedKey.Length)" }
-            # Insert dashes for readability
-            $decodedKey = $decodedKey.Substring(0, 5) + "-" +
-                          $decodedKey.Substring(5, 5) + "-" +
-                          $decodedKey.Substring(10, 5) + "-" +
-                          $decodedKey.Substring(15, 5) + "-" +
-                          $decodedKey.Substring(20, 5)
-            return $decodedKey
+        
+            if ($decodedKey.Length -ne 25) {
+                throw "Decoded product key length is invalid: $($decodedKey.Length)"
+            }
+        
+            # Insert dashes for readability (split into groups of 5 characters)
+            return ($decodedKey -replace ".{5}", '$&-').TrimEnd('-')
         }
 
-        # Retrieve installed product key from the registry
+        # Retrieve the installed product key
         $digitalProductId = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -ErrorAction SilentlyContinue).DigitalProductId
         $installedKey = if ($digitalProductId) { Convert-Key -DigitalProductId $digitalProductId } else { "Not Found" }
 
-        # Fallback: Try querying using WMI
+        # Fallback to WMI query only if necessary
         if ($installedKey -eq "Not Found") {
             try {
-                $license = Get-CimInstance -Query "SELECT * FROM SoftwareLicensingProduct WHERE PartialProductKey IS NOT NULL AND LicenseStatus=1"
-                if ($license) {
-                    $digitalProductId = $license.DigitalProductId
-                    if ($digitalProductId) {
-                        $installedKey = Convert-Key -DigitalProductId $digitalProductId
-                    } else {
-                        $installedKey = "Not Found"
-                    }
-                } else {
-                    $installedKey = "Not Found"
+                $license = Get-CimInstance -Query "SELECT * FROM SoftwareLicensingProduct WHERE PartialProductKey IS NOT NULL AND LicenseStatus=1" -ErrorAction Stop
+                if ($license -and $license.DigitalProductId) {
+                    $installedKey = Convert-Key -DigitalProductId $license.DigitalProductId
                 }
             } catch {
                 $installedKey = "Not Found"
-            }
-        }
-        # Check if the installed key matches a generic key
-        $matchedKey = $WindowsGenericKeys | Where-Object { $_.Key -eq $installedKey }
-        
-        if ($matchedKey) {
-            $installedKey += " (Generic key: $($matchedKey.Edition))"
+            }   
         }
 
+        # Check if the installed key matches a generic key
+        if ($WindowsGenericKeys) {
+            $matchedKey = $WindowsGenericKeys | Where-Object { $_.Key -eq $installedKey }
+            if ($matchedKey) {
+                $installedKey += " (Generic key: $($matchedKey.Edition))"
+            }
+        }
+
+        # Retrieve the OEM key
         $oemKey = try {
-            (Get-CimInstance -ClassName SoftwareLicensingService -ErrorAction SilentlyContinue).OA3xOriginalProductKey
+            (Get-CimInstance -ClassName SoftwareLicensingService -ErrorAction Stop).OA3xOriginalProductKey
         } catch {
             "Not Found"
         }
 
+        # Assign colors for display
         $installedKeyColor = if ($installedKey -ne "Not Found") { "Yellow" } else { "Red" }
         $oemKeyColor = if ($oemKey -eq "Not Found") { "Yellow" } elseif ($oemKey -eq "Error") { "Red" } else { "Green" }
 
+        # Validate colors
         $installedKeyColor = if ([Enum]::IsDefined([System.ConsoleColor], $installedKeyColor)) { $installedKeyColor } else { "Red" }
         $oemKeyColor = if ([Enum]::IsDefined([System.ConsoleColor], $oemKeyColor)) { $oemKeyColor } else { "Red" }
 
-        # Return the results with color metadata
+        # Return results as a PSCustomObject
         return [PSCustomObject]@{
             InstalledKey      = $installedKey
             InstalledKeyColor = $installedKeyColor
-            OEMKey            = if ($oemKey) { $oemKey } else { "Not Found" }
+            OEMKey            = $oemKey
             OEMKeyColor       = $oemKeyColor
         }
     } catch {
-        Write-Error $_.Exception.Message
+        Write-Error "An error occurred: $_"
         return [PSCustomObject]@{
             InstalledKey      = "Error"
             InstalledKeyColor = "Red"
@@ -294,6 +299,7 @@ function Show-WindowsProductKeys {
         }
     }
 }
+
 
 function Get-CameraAndOpenApp {
     try {
@@ -412,7 +418,7 @@ function Get-SystemInfo {
                 $result = & $task
                 $systemInfo | Add-Member -MemberType NoteProperty -Name $taskName -Value $result
             }
-            Write-Host "`nTask '$taskName' completed in $($executionTime.TotalSeconds) seconds." -ForegroundColor Green
+            #Write-Host "`nTask '$taskName' completed in $($executionTime.TotalSeconds) seconds." -ForegroundColor Green
         } catch {
             Write-Host "`nTask '$taskName' encountered an error: $_" -ForegroundColor Red
             $systemInfo | Add-Member -MemberType NoteProperty -Name $taskName -Value "Error"

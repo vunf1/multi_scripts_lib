@@ -334,6 +334,7 @@ function Start-ExecutableBackground {
 }
 function Start-Files {
     Start-ExecutableBackground -Executables $global:executables
+    Clear-Host
 }
 function Get-EdgePath {
     # Try to find msedge.exe in the system's PATH
