@@ -39,3 +39,4 @@ work/.vscode/settings.json
 work/Info+_CLI/MyCert.pfx
 work/Info+_CLI/ConfigPackageToEXE copy.ps1
 work/Info+_CLI/package222.psd1
+/work/Info+_CLI/tests
