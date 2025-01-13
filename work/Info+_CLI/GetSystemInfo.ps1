@@ -1,242 +1,210 @@
+
+<# if ($PSScriptRoot) {
+    # Load dependent scripts from the current directory during development
+    . "$PSScriptRoot\CommandHelpers.ps1"
+}else {
+    . "./CommandHelpers.ps1"
+} #>
 function Get-DiskInfo {
-    # Initialize an empty array to store disk objects
-    $Disks = @()
+    try {
+        # Initialize the result array
+        $Disks = @()
 
-    # Fetch volumes and iterate over them
-    Get-Volume | Where-Object { $null -ne $_.DriveLetter } | ForEach-Object {
-        $diskHealth = "Unknown"
-        $healthPercentage = "Unknown%"
-        $diskName = "Unknown"
-        $diskObject = $null
+        # Fetch volumes and iterate over them
+        Get-Volume | Where-Object { $null -ne $_.DriveLetter } | ForEach-Object {
+            $diskName = "Unknown"
+            $totalSizeGB = [math]::round($_.Size / 1GB, 2)
+            $usedSizeGB = [math]::round(($_.Size - $_.SizeRemaining) / 1GB, 2)
 
-        try {
-            # Get the associated disk number using Get-Partition
-            $partition = Get-Partition -DriveLetter $_.DriveLetter
-            if ($partition) {
-                $diskNumber = $partition.DiskNumber
+            try {
 
-                # Attempt to get disk health using Get-PhysicalDisk
-                $physicalDisk = Get-PhysicalDisk | Where-Object { $_.DeviceID -eq $diskNumber }
-                if ($physicalDisk) {
-                    $diskHealth = $physicalDisk.HealthStatus
-                    $diskName = $physicalDisk.FriendlyName
-
-                    # Calculate health percentage for SSD or HDD dynamically
-                    if ($physicalDisk.MediaType -eq "SSD") {
-                        # Use SMART attributes for SSD if available
-
-                        try {
-                            # Use Get-CimInstance for SMART data
-                            $smartData = Get-CimInstance -Namespace "root\WMI" -ClassName "MSStorageDriver_FailurePredictStatus" |
-                                Where-Object { $_.InstanceName -match $diskNumber }
-                        
-                            if ($smartData -and $smartData.PredictFailure -eq $false) {$healthPercentage = "100%"} 
-                            elseif ($smartData -and $smartData.PredictFailure -eq $true) {
-                                $healthPercentage = "10%"
-                                $diskHealth = "Failing"
-                            } else {$healthPercentage = "Unknown%"}
-                        } catch {
-                            # Handle 'Access Denied' or other errors
-                            Write-Host "Access denied when querying SMART data for disk $diskNumber. Using alternative logic." -ForegroundColor Yellow
-                            $diskHealth = "Error: Unable to query SMART data"
-                            $healthPercentage = "Unknown%"
-                        }                       
-                        
-                    } else {
-                        # Default for HDD: Assuming manual degradation over time
-                        $healthPercentage = "HDD: Assuming manual degradation over time"
+                $partition = Get-Partition -DriveLetter $_.DriveLetter -ErrorAction SilentlyContinue
+                if ($partition) {
+                    $diskNumber = $partition.DiskNumber
+                    $physicalDisk = Get-PhysicalDisk | Where-Object { $_.DeviceID -eq $diskNumber }
+                    if ($physicalDisk) {
+                        $diskName = $physicalDisk.FriendlyName
                     }
-                } else {
-                    try {
-                        # Fallback to SMART attributes if Get-PhysicalDisk fails
-                        $smartData = Get-CimInstance -Namespace "root\WMI" -ClassName "MSStorageDriver_FailurePredictData" |
-                            Where-Object { $_.InstanceName -match $diskNumber }
-                        if ($smartData) {
-                            $currentValue = $smartData.VendorSpecific[3]
-                            $thresholdValue = $smartData.VendorSpecific[5]
-                    
-                            if ($null -ne $currentValue -and $null -ne $thresholdValue -and $thresholdValue -ne 0) {
-                                $healthPercentage = [math]::round(($currentValue / $thresholdValue) * 100, 2)
-                                $diskHealth = if ($healthPercentage -ge 70) { "Healthy" } elseif ($healthPercentage -ge 40) { "Warning" } else { "Failing" }
-                            } else {
-                                $diskHealth = "Unknown (Invalid SMART Data)"
-                                $healthPercentage = "Unknown%"
-                            }
-                        } else {
-                            Write-Host "SMART data not available for disk $diskNumber." -ForegroundColor Yellow
-                            $diskHealth = "Unknown (No SMART Data)"
-                            $healthPercentage = "Unknown%"
-                        }
-                    } catch {
-                        Write-Host "Error accessing SMART data for disk ${diskNumber}: $_" -ForegroundColor Red
-                        $diskHealth = "Error"
-                        $healthPercentage = "Error%"
-                    }                  
                 }
-            } else {
-                $diskHealth = "Unknown (No Partition Data)"
-                $healthPercentage = "Unknown%"
+            } catch {
+                Write-Host "Error retrieving disk details for drive $_.DriveLetter: $_" -ForegroundColor Yellow
             }
-        } catch {
-            Write-Host "Failed to retrieve health status for disk $_.DriveLetter: $_" -ForegroundColor Red
-            $diskHealth = "Error"
-            $healthPercentage = "Error%"
+
+            $diskObject = [PSCustomObject]@{
+                DriveLetter = $_.DriveLetter
+                DiskName    = $diskName
+                TotalSizeGB = "$totalSizeGB GB"
+                UsedSizeGB  = "$usedSizeGB GB"
+            }
+            $Disks += $diskObject
         }
 
-        # Construct the disk object and add it to the array
-        $diskObject = [PSCustomObject]@{
-            DriveLetter      = $_.DriveLetter
-            DiskName         = $diskName
-            TotalSizeGB      = [math]::round($_.Size / 1GB, 2)
-            FreeSpaceGB      = [math]::round($_.SizeRemaining / 1GB, 2)
-            HealthStatus     = $diskHealth
-            HealthPercentage = if ($healthPercentage -is [string]) { $healthPercentage } else { "$healthPercentage%" }
-        }
-
-        $Disks += $diskObject
+        # Return the disk information array
+        return $Disks
+    } catch {
+        Write-Host "An error occurred while retrieving disk information: $_" -ForegroundColor Red
     }
-    # Return the array of disk information
-    return $Disks
 }
+
+
 
 function Get-TotalSticksRam {
-    return [math]::round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
+    try {
+        # Retrieve total physical memory
+        $totalMemory = [math]::round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
+
+        # Get information about memory slots
+        $memoryModules = Get-CimInstance -ClassName Win32_PhysicalMemory
+        $totalSlots = (Get-CimInstance -ClassName Win32_PhysicalMemoryArray).MemoryDevices
+        $usedSlots = $memoryModules.Count
+
+        # Check for onboard memory
+        $onboardMemory = $memoryModules | Where-Object { $_.FormFactor -eq 12 } # FormFactor 12 indicates onboard memory
+        $onboardMemorySize = if ($onboardMemory) {
+            [math]::round(($onboardMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB, 2)
+        } else {
+            0
+        }
+        
+        # Get the value of each memory slot
+        $slotDetails = $memoryModules | ForEach-Object {
+            [PSCustomObject]@{
+                Slot = $_.DeviceLocator
+                Size = "$([math]::round($_.Capacity / 1GB, 2)) GB"
+                Architecture = Get-MemoryTypeName -MemoryType $_.SMBIOSMemoryType
+                Speed         = if ($_.Speed) { "$($_.Speed) MHz" } else { "Unknown" }
+            }
+        }
+
+        # Return the result as a structured object
+        return [PSCustomObject]@{
+            TotalMemory     = "${totalMemory} GB"
+            TotalSlots      = $totalSlots
+            UsedSlots       = $usedSlots
+            OnboardMemory   = if ($onboardMemory) { "Yes" } else { "No" }
+            OnboardSize     = "${onboardMemorySize} GB"
+            SlotDetails     = $slotDetails
+        }
+    } catch {
+        Write-Error "An error occurred while retrieving memory information: $_"
+        return $null
+    }
 }
 
+
 function Get-ProcessorInfo {
-    return Get-CimInstance -ClassName Win32_Processor | ForEach-Object { 
-        "$( $_.Name.Trim() ) $($_.MaxClockSpeed) MHz Cores $($_.NumberOfCores) $($_.NumberOfLogicalProcessors) Socket $($_.SocketDesignation)" 
+    try {
+        # Fetch processor details using Get-WmiObject
+        $processors = Get-WmiObject -Class Win32_Processor | ForEach-Object {
+            [PSCustomObject]@{
+                Name              = $_.Name.Trim()
+                MaxClockSpeed     = "$($_.MaxClockSpeed) MHz"
+                Cores             = $_.NumberOfCores
+                LogicalProcessors = $_.NumberOfLogicalProcessors
+                Socket            = $_.SocketDesignation
+            }
+        }
+
+        # Determine the color based on the processor brand
+        $cpuColor = if ($processors.Name -match "AMD") { "Red" } `
+                    elseif ($processors.Name -match "Intel") { "Cyan" } `
+                    else { "Blue" }
+
+        return [PSCustomObject]@{
+            Info  = $processors
+            Color = if ([Enum]::IsDefined([System.ConsoleColor], $cpuColor)) { $cpuColor } else { "Gray" }
+        }
+    } catch {
+        # Handle any errors gracefully
+        return [PSCustomObject]@{
+            Info  = "Error retrieving processor information"
+            Color = "Red"
+        }
     }
 }
 
 function Get-GPUInfo {
-    return Get-CimInstance -ClassName Win32_VideoController | ForEach-Object { $_.Caption.Trim() }
+    try {
+        $gpus = Get-CimInstance -ClassName Win32_VideoController -ErrorAction SilentlyContinue | ForEach-Object {
+            # Determine if the GPU is dedicated or integrated
+            $isDedicated = if ($_.AdapterRAM -and $_.AdapterRAM -gt 0) { 
+                "Dedicated" 
+            } elseif ($_.AdapterCompatibility -match "Intel|AMD") {
+                if ($_.Description -match "UHD|Integrated|APU") { 
+                    "Integrated" 
+                } else { 
+                    "Unknown" 
+                }
+            } else { 
+                "Unknown" 
+            }
+
+            # Assign color based on GPU name
+            $gpuColor = if ($_.Caption -match "NVIDIA") { "Green" } `
+                        elseif ($_.Caption -match "AMD") { "Red" } `
+                        elseif ($_.Caption -match "Intel") { "Cyan" } else { "Gray" }
+
+            [PSCustomObject]@{
+                Name       = $_.Caption.Trim()
+                Dedicated  = $isDedicated
+                Color      = if ([Enum]::IsDefined([System.ConsoleColor], $gpuColor)) { $gpuColor } else { "Gray" }
+            }
+        }
+
+        # If GPUs are found, return them as a list
+        if ($gpus -and $gpus.Count -gt 0) {
+            return [PSCustomObject]@{
+                GPUs = $gpus
+            }
+        } else {
+            # Return a default object if no GPUs are found
+            return [PSCustomObject]@{
+                GPUs = @([PSCustomObject]@{ Name = "No GPU Found"; Dedicated = "N/A"; Color = "Gray" })
+            }
+        }
+    } catch {
+        # Handle any errors and return a default object
+        return [PSCustomObject]@{
+            GPUs = @([PSCustomObject]@{ Name = "Error Retrieving GPU Info"; Dedicated = "N/A"; Color = "Red" })
+        }
+    }
 }
 
 function Get-WindowsVersion {
     return (Get-CimInstance -ClassName Win32_OperatingSystem).Caption
 }
-
 function Get-ActivationDetails {
     try {
-        # Fetch activation status
-        $ActivationRaw = cscript /nologo $env:SystemRoot\System32\slmgr.vbs /dli | Select-String -Pattern "(License Status|Estado da Licen[çc]a|Estado da Ativa[çc][ãa]o):.+"
-        $ActivationStatus = if ($ActivationRaw) {
-            $ActivationRaw -replace "(License Status|Estado da Licen[çc]a|Estado da Ativa[çc][ãa]o): "
-        } else {throw "Primary method failed"}
-    
-        # Fetch license type
-        $LicenseTypeRaw = cscript /nologo $env:SystemRoot\System32\slmgr.vbs /dli | Select-String -Pattern "(Retail|OEM|Volume|Subscription|Evaluation|Academic|NFR|Upgrade|COEM|Pre-release|Enterprise|Insider|Education|Trial|MSDN|Insider|Provisória|Subscrip[çc][ãa]o|Avalia[çc][ãa]o|Acad[êe]mica|Ensino|Não Para Revenda)"
-        $LicenseType = $LicenseTypeRaw.Matches.Value -join ", "
-    
-        # Determine subtypes
-        $LicenseSubtypeMapping = @{
-            "Volume"        = @{
-                "Patterns"  = "(KMS|MAK|AAD-based|AD-based|Baseada em AAD|Baseada em AD)"
-                "Subtypes"  = @{
-                    "KMS|Gest[ãa]o de Chaves (KMS)" = "KMS"
-                    "MAK|Chave de Ativação Múltipla (MAK)" = "MAK"
-                    "AAD-based|Baseada em AAD" = "AAD-based"
-                    "AD-based|Baseada em AD" = "Active Directory-based"
-                }
-                "Default"   = "Unknown Volume Type"
-            }
-            "Retail|Venda a Varejo" = @{
-                "Patterns"  = "(Upgrade|Atualiza[çc][ãa]o)"
-                "Subtypes"  = @{
-                    "Upgrade|Atualiza[çc][ãa]o" = "Upgrade"
-                }
-                "Default"   = "Standard"
-            }
-            "OEM" = @{
-                "Patterns"  = "(COEM|OEM Comercial)"
-                "Subtypes"  = @{
-                    "COEM|OEM Comercial" = "Commercial OEM"
-                }
-                "Default"   = "Standard OEM"
-            }
-            "Subscription|Subscrip[çc][ãa]o" = @{
-                "Patterns"  = "(Microsoft 365|Visual Studio|Outro)"
-                "Subtypes"  = @{
-                    "Microsoft 365" = "Microsoft 365"
-                    "Visual Studio" = "Visual Studio Subscription"
-                }
-                "Default"   = "Other Subscription"
-            }
-            "Evaluation|Avalia[çc][ãa]o" = @{
-                "Patterns"  = "(Trial|Provis[óo]ria)"
-                "Subtypes"  = @{
-                    "Trial|Provis[óo]ria" = "Trial"
-                }
-                "Default"   = "Standard Evaluation"
-            }
-            "Academic|Acad[êe]mica|Education|Ensino" = @{
-                "Default"   = "Education or Academic"
-            }
-            "Enterprise" = @{
-                "Patterns"  = "(Agreement|Acordo)"
-                "Subtypes"  = @{
-                    "Agreement|Acordo" = "Enterprise Agreement"
-                }
-                "Default"   = "Standard Enterprise"
-            }
-            "NFR|Não Para Revenda" = @{
-                "Default"   = "Not For Resale"
-            }
-            "Pre-release|Insider" = @{
-                "Default"   = "Insider/Pre-release"
-            }
+        $slmgrOutput = cscript /nologo $env:SystemRoot\System32\slmgr.vbs /dli 2>&1 | Out-String
+
+        $activationStatusPattern = "(License Status|Estado da Licen[çc]a|Estado da Ativa[çc][ãa]o):\s*(Licensed|Licenciado)"
+
+        if ($slmgrOutput -match $activationStatusPattern) {
+            $status = "Activated"
+            $activationColor = "Green"
+        } else {
+            $status = "Not Activated"
+            $activationColor = "Red"
         }
-        
-        # Efficiently determine the subtype
-        foreach ($type in $LicenseSubtypeMapping.Keys) {
-            if ($LicenseType -match $type) {
-                $config = $LicenseSubtypeMapping[$type]
-                if ($config.Patterns) {
-                    # Check for specific subtypes
-                    $rawSubtype = cscript /nologo $env:SystemRoot\System32\slmgr.vbs /dli | Select-String -Pattern $config.Patterns
-                    foreach ($pattern in $config.Subtypes.Keys) {
-                        if ($rawSubtype -match $pattern) {
-                            $LicenseType += " ($($config.Subtypes[$pattern]))"
-                            break
-                        }
-                    }
-                }
-                # Add default subtype if no match
-                if ($LicenseType -notmatch "\(") {
-                    $LicenseType += " ($($config.Default))"
-                }
-            }
+
+        if ($status -eq "Unknown") {
+            Write-Host "Unexpected slmgr output for debug:" -ForegroundColor Yellow
+            Write-Host $slmgrOutput
         }
-    
-        # Combine activation status and license type
-        $LicenseDetails = "$ActivationStatus - $LicenseType"
-    
+
+        return [PSCustomObject]@{
+            Status          = $status
+            ActivationColor = if ([Enum]::IsDefined([System.ConsoleColor], $activationColor)) { $activationColor } else { "Gray" }
+        }
     } catch {
-        try {
-            # Fallback: CIM method
-            $ActivationAlt = (Get-CimInstance -ClassName SoftwareLicensingProduct | Where-Object { $null -ne $_.PartialProductKey -and $_.LicenseStatus -eq 1 }).Name
-            if ($ActivationAlt) {
-                $LicenseDetails = "Licensed (via CIM) - $ActivationAlt"
-            } else {
-                throw "CIM method failed"
-            }
-        } catch {
-            try {
-                # Fallback: Registry method
-                $ActivationRegistry = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" | Select-Object -ExpandProperty DigitalProductId
-                if ($ActivationRegistry) {
-                    $LicenseDetails = "Licensed (via Registry)"
-                } else {
-                    $LicenseDetails = "Unknown"
-                }
-            } catch {
-                $LicenseDetails = "Unknown"
-            }
+        Write-Host "An error occurred while checking activation status: $_" -ForegroundColor Red
+        return [PSCustomObject]@{
+            Status          = "Unknown"
+            ActivationColor = "Red"
         }
     }
-    return $LicenseDetails
 }
+
 function Show-WindowsProductKeys {
     try {
         # Function to decode the product key
@@ -245,10 +213,8 @@ function Show-WindowsProductKeys {
             $keyChars = "BCDFGHJKMPQRTVWXY2346789"
             $decodedKey = ""
             $key = New-Object 'System.Collections.Generic.List[System.Byte]'
-
             # Initialize the key array from DigitalProductId
             for ($i = 52; $i -ge 52 - 15; $i--) { $key.Add($DigitalProductId[$i]) }
-
             # Decode the key
             for ($i = 0; $i -lt 25; $i++) {
                 $current = 0
@@ -261,7 +227,6 @@ function Show-WindowsProductKeys {
             }
 
             if ($decodedKey.Length -ne 25) { throw "Decoded product key length is invalid: $($decodedKey.Length)" }
-
             # Insert dashes for readability
             $decodedKey = $decodedKey.Substring(0, 5) + "-" +
                           $decodedKey.Substring(5, 5) + "-" +
@@ -271,45 +236,44 @@ function Show-WindowsProductKeys {
             return $decodedKey
         }
 
-        # Attempt to retrieve installed product key
+        # Retrieve installed product key from the registry
         $digitalProductId = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -ErrorAction SilentlyContinue).DigitalProductId
-        $installedKey = $null
+        $installedKey = if ($digitalProductId) { Convert-Key -DigitalProductId $digitalProductId } else { "Not Found" }
 
-        if ($digitalProductId) {
-            $installedKey = Convert-Key -DigitalProductId $digitalProductId
-        } else {
-            # Fallback: Try querying using WMI (Win32_ComputerSystemSoftwareLicensing)
+        # Fallback: Try querying using WMI
+        if ($installedKey -eq "Not Found") {
             try {
-                $installedKey = (Get-CimInstance -Query "SELECT * FROM SoftwareLicensingProduct WHERE PartialProductKey IS NOT NULL AND LicenseStatus=1").PartialProductKey
-                $installedKey = if ($installedKey) { "XXXXX-XXXXX-XXXXX-XXXXX-$installedKey" } else { "Not Found" }
+                $license = Get-CimInstance -Query "SELECT * FROM SoftwareLicensingProduct WHERE PartialProductKey IS NOT NULL AND LicenseStatus=1"
+                if ($license) {
+                    $digitalProductId = $license.DigitalProductId
+                    if ($digitalProductId) {
+                        $installedKey = Convert-Key -DigitalProductId $digitalProductId
+                    } else {
+                        $installedKey = "Not Found"
+                    }
+                } else {
+                    $installedKey = "Not Found"
+                }
             } catch {
                 $installedKey = "Not Found"
             }
         }
-
-        # Retrieve OEM key if available
-        $oemKey = $null
-        try {
-            $oemKey = (Get-CimInstance -ClassName SoftwareLicensingService -ErrorAction SilentlyContinue).OA3xOriginalProductKey
-            if (-not $oemKey) {
-                throw "Primary method for retrieving OEM key failed."
-            }
-        } catch {
-            # Fallback: Use slmgr.vbs to fetch OEM key
-            try {
-                $oemKeyOutput = cscript.exe "$env:SystemRoot\System32\slmgr.vbs" /dli | Out-String
-                $oemKey = ($oemKeyOutput -split "`n") -match "OA3xOriginalProductKey" | ForEach-Object { ($_ -split ":")[1].Trim() }
-                if (-not $oemKey) { $oemKey = "Not Found" }
-            } catch {
-                $oemKey = "Not Found"
-            }
+        # Check if the installed key matches a generic key
+        $matchedKey = $WindowsGenericKeys | Where-Object { $_.Key -eq $installedKey }
+        
+        if ($matchedKey) {
+            $installedKey += " (Generic key: $($matchedKey.Edition))"
         }
 
-        # Assign colors with validation
+        $oemKey = try {
+            (Get-CimInstance -ClassName SoftwareLicensingService -ErrorAction SilentlyContinue).OA3xOriginalProductKey
+        } catch {
+            "Not Found"
+        }
+
         $installedKeyColor = if ($installedKey -ne "Not Found") { "Yellow" } else { "Red" }
         $oemKeyColor = if ($oemKey -eq "Not Found") { "Yellow" } elseif ($oemKey -eq "Error") { "Red" } else { "Green" }
 
-        # Validate colors and set default if invalid
         $installedKeyColor = if ([Enum]::IsDefined([System.ConsoleColor], $installedKeyColor)) { $installedKeyColor } else { "Red" }
         $oemKeyColor = if ([Enum]::IsDefined([System.ConsoleColor], $oemKeyColor)) { $oemKeyColor } else { "Red" }
 
@@ -322,52 +286,61 @@ function Show-WindowsProductKeys {
         }
     } catch {
         Write-Error $_.Exception.Message
-        # Return error details with color metadata
         return [PSCustomObject]@{
             InstalledKey      = "Error"
             InstalledKeyColor = "Red"
             OEMKey            = "Error"
             OEMKeyColor       = "Red"
-            ErrorMessage      = $_.Exception.Message
         }
     }
 }
-
 
 function Get-CameraAndOpenApp {
     try {
         Write-Host "Checking for camera devices..." -ForegroundColor Yellow
 
-        # Check for camera devices using the Win32_PnPEntity class
-        $cameraDevices = Get-CimInstance -ClassName Win32_PnPEntity | Where-Object {
+        # Check for camera devices using multiple approaches
+        $cameraDevices = @()
+
+        # Primary check using Win32_PnPEntity
+        $cameraDevices += Get-CimInstance -ClassName Win32_PnPEntity -ErrorAction SilentlyContinue | Where-Object {
             $_.Name -match "Camera|Webcam|Imaging Device" -or $_.PNPClass -eq "Image"
         }
 
+        # Fallback check using Win32_USBHub (for USB-connected cameras)
+        $cameraDevices += Get-CimInstance -ClassName Win32_USBHub -ErrorAction SilentlyContinue | Where-Object {
+            $_.Name -match "Camera|Webcam"
+        }
+
+        # Remove duplicates and ensure valid results
+        $cameraDevices = $cameraDevices | Where-Object { $_ -ne $null } | Select-Object -Unique
+
         if ($cameraDevices -and $cameraDevices.Count -gt 0) {
-            Write-Host "Camera driver found:" -ForegroundColor Green
+            Write-Host "Camera device(s) found:" -ForegroundColor Green
             $cameraDevices | ForEach-Object {
                 Write-Host "Name: $($_.Name)"
             }
-        } else {
-            Write-Host "No camera driver detected on this machine. Proceeding to open the Camera app..." -ForegroundColor Yellow
-        }
 
-        # Attempt to open the default Camera app
-        try {
-            Start-Process -FilePath "microsoft.windows.camera:"
-            Write-Host "Opening the default Camera app..." -ForegroundColor Green
-        } catch {
-            Write-Host "Default Camera app launch failed. Attempting fallback options..." -ForegroundColor Yellow
+            # Attempt to open the default Camera app
+            try {
+                Start-Process -FilePath "microsoft.windows.camera:"
+                Write-Host "Opening the default Camera app..." -ForegroundColor Green
+            } catch {
+                Write-Host "Default Camera app launch failed. Attempting fallback options..." -ForegroundColor Yellow
 
-            # Fallbacks
-            if (-not (Open-CameraFallback)) {
-                Write-Host "All attempts to open the Camera app failed. Consider using an alternative application." -ForegroundColor Red
+                # Fallbacks
+                if (-not (Open-CameraFallback)) {
+                    Write-Host "All attempts to open the Camera app failed. Consider using an alternative application." -ForegroundColor Red
+                }
             }
+        } else {
+            Write-Host "No camera devices detected on this machine. Camera app will not be opened." -ForegroundColor Yellow
         }
     } catch {
         Write-Host "An error occurred while checking for camera drivers: $_" -ForegroundColor Red
     }
 }
+
 function Open-CameraFallback {
     try {
         # Fallback 1: Use explorer with URI
@@ -403,10 +376,11 @@ function Open-CameraFallback {
     return $false
 }
 
-
 function Get-SystemInfo {
-    Write-Host "`n***** If stuck press ENTER *****" -ForegroundColor Red -NoNewline; Write-Host " `nRefreshing System Information..." -ForegroundColor Yellow # Sencond line is been cover by progressbar
+    Write-Host "`n***** IF STUCK PRESS [ENTER] *****" -ForegroundColor Red -NoNewline
+    Write-Host " `nRefreshing System Information..." -ForegroundColor Yellow
 
+    # Define tasks dynamically with a script block
     $tasks = @(
         @{ Name = "Memory Info"; Task = { Get-TotalSticksRam } },
         @{ Name = "Processor Info"; Task = { Get-ProcessorInfo } },
@@ -416,40 +390,80 @@ function Get-SystemInfo {
         @{ Name = "System Product Keys"; Task = { Show-WindowsProductKeys } },
         @{ Name = "Disk Info"; Task = { Get-DiskInfo } }
     )
+
     $totalTasks = $tasks.Count
     $results = @()
+
+    $systemInfo = [PSCustomObject]@{}
+
     for ($i = 0; $i -lt $totalTasks; $i++) {
         $taskName = $tasks[$i].Name
         $task = $tasks[$i].Task
+
+        Write-Host "`nStarting task: $taskName" -ForegroundColor Cyan
 
         $percentComplete = [math]::Round((($i + 1) / $totalTasks) * 100)
         Write-Progress -Activity "> System Information >>>>>>>>" `
                        -Status "Processing: $taskName ($($i + 1) of $totalTasks)" `
                        -PercentComplete $percentComplete
-        $results += & $task
+
+        try {
+            $executionTime = Measure-Command {
+                $result = & $task
+                $systemInfo | Add-Member -MemberType NoteProperty -Name $taskName -Value $result
+            }
+            Write-Host "`nTask '$taskName' completed in $($executionTime.TotalSeconds) seconds." -ForegroundColor Green
+        } catch {
+            Write-Host "`nTask '$taskName' encountered an error: $_" -ForegroundColor Red
+            $systemInfo | Add-Member -MemberType NoteProperty -Name $taskName -Value "Error"
+        }
     }
+
     Write-Progress -Activity "System Information Completed" -Completed
-    Clear-Host
 
-    $MemoryInfo, $CPUInfo, $GPUInfo, $WindowsStatus, $ActivationStatus, $ProductKeys, $DiskInfo = $results
-
-    $ActivationColor = if ($ActivationStatus -match "Licensed|Licenciado") { "Green" } else { "Red" }
-    
-    $CPUColor = if ($CPUInfo -match "AMD") { "Red" } elseif ($CPUInfo -match "Intel") { "Cyan" } else { "Blue" }
-    
-    $GPUColor = if ($GPUInfo -match "NVIDIA") { "Green" } elseif ($GPUInfo -match "AMD") { "Red" } elseif ($GPUInfo -match "Intel") { "Cyan" } else { "Gray" }
-
-    # Create a PSCustomObject to return the system information
-    return [PSCustomObject]@{
-        MemoryInfo         = $MemoryInfo
-        CPUInfo            = $CPUInfo
-        GPUInfo            = $GPUInfo
-        DiskInfo           = $DiskInfo
-        ProductKeys        = $ProductKeys
-        WindowsStatus      = $WindowsStatus
-        ActivationStatus   = $ActivationStatus
-        ActivationColor    = $ActivationColor
-        CPUColor           = $CPUColor
-        GPUColor           = $GPUColor
-    }
+    return $systemInfo
 }
+
+<# # Fetch system information
+$data = Get-SystemInfo
+
+# Output the results in a loop
+foreach ($key in $data.PSObject.Properties) {
+    # Check if the value is a PSCustomObject or an IEnumerable
+    if ($key.Value -is [PSCustomObject] -or $key.Value -is [System.Collections.IEnumerable]) {
+        Write-Host "$($key.Name):"
+
+        if ($key.Name -eq "Memory Info" -and $key.Value -is [PSCustomObject]) {
+            # Memory Info with SlotDetails
+            Write-Host "  Total Memory: $($key.Value.TotalMemory)"
+            Write-Host "  Total Slots: $($key.Value.TotalSlots)"
+            Write-Host "  Used Slots: $($key.Value.UsedSlots)"
+            Write-Host "  Onboard Memory: $($key.Value.OnboardMemory)"
+            Write-Host "  Onboard Size: $($key.Value.OnboardSize)"
+            Write-Host "  Slot Details:"
+            foreach ($slot in $key.Value.SlotDetails) {
+                Write-Host "    Slot: $($slot.Slot) | Size: $($slot.Size) | Architecture: $($slot.Architecture) | Speed: $($slot.Speed)"
+            }
+        } elseif ($key.Name -eq "GPU Info" -and $key.Value -is [PSCustomObject]) {
+            # GPU Info
+            Write-Host "  GPUs:"
+            foreach ($gpu in $key.Value.GPUs) {
+                Write-Host "    Name: $($gpu.Name) | Dedicated: $($gpu.Dedicated) | Color: $($gpu.Color)"
+            }
+        } else {
+            # Generic handling for other PSCustomObject or IEnumerable values
+            foreach ($item in $key.Value) {
+                if ($item -is [PSCustomObject]) {
+                    foreach ($subKey in $item.PSObject.Properties) {
+                        Write-Host "  $($subKey.Name): $($subKey.Value)"
+                    }
+                } else {
+                    Write-Host "  $item"
+                }
+            }
+        }
+    } else {
+        # Simple property output
+        Write-Host "$($key.Name): $($key.Value)"
+    }
+ #>
