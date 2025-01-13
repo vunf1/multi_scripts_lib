@@ -479,3 +479,116 @@ function Disable-BitLockerOnAllDrives {
         Write-Host "An error occurred: $_" -ForegroundColor Red
     }
 }
+
+function Get-MemoryTypeName {
+    param ([int]$MemoryType)
+    switch ($MemoryType) {
+        0  { "Unknown" }
+        1  { "Other" }
+        2  { "DRAM" }
+        3  { "Synchronous DRAM" }
+        4  { "Cache DRAM" }
+        5  { "EDO" }
+        6  { "EDRAM" }
+        7  { "VRAM" }
+        8  { "SRAM" }
+        9  { "RAM" }
+        10 { "ROM" }
+        11 { "Flash" }
+        12 { "EEPROM" }
+        13 { "FEPROM" }
+        14 { "EPROM" }
+        15 { "CDRAM" }
+        16 { "3DRAM" }
+        17 { "SDRAM" }
+        18 { "SGRAM" }
+        19 { "RDRAM" }
+        20 { "DDR" }
+        21 { "DDR2" }
+        22 { "DDR2 FB-DIMM" }
+        23 { "Reserved" }
+        24 { "DDR3" }
+        25 { "FBD2" }
+        26 { "DDR4" }
+        27 { "DDR5" }
+        28 { "LPDDR" }
+        29 { "LPDDR2" }
+        30 { "LPDDR3" }
+        31 { "LPDDR4" }
+        32 { "Logical non-volatile device" }
+        33 { "HBM" }        # High Bandwidth Memory
+        34 { "HBM2" }       # High Bandwidth Memory 2
+        35 { "DDR4E-SDRAM" }
+        36 { "LPDDR4X" }
+        37 { "LPDDR5" }
+        38 { "LPDDR5X" }
+        39 { "HBM3" }       # High Bandwidth Memory 3
+        40 { "GDDR" }
+        41 { "GDDR2" }
+        42 { "GDDR3" }
+        43 { "GDDR4" }
+        44 { "GDDR5" }
+        45 { "GDDR6" }
+        46 { "GDDR6X" }     # NVIDIA proprietary memory standard
+        default { "Unknown or Reserved" }
+    }
+}
+
+$WindowsGenericKeys = @(
+    # Windows 11 RTM Generic Keys
+    @{ Edition = "Windows 11 Home"; Key = "YTMG3-N6DKC-DKB77-7M9GH-8HVX7" },
+    @{ Edition = "Windows 11 Home N"; Key = "4CPRK-NM3K3-X6XXQ-RXX86-WXCHW" },
+    @{ Edition = "Windows 11 Home Single Language"; Key = "BT79Q-G7N6G-PGBYW-4YWX6-6F4BT" },
+    @{ Edition = "Windows 11 Home Country Specific"; Key = "N2434-X9D7W-8PF6X-8DV9T-8TYMD" },
+    @{ Edition = "Windows 11 Pro"; Key = "VK7JG-NPHTM-C97JM-9MPGT-3V66T" },
+    @{ Edition = "Windows 11 Pro N"; Key = "2B87N-8KFHP-DKV6R-Y2C8J-PKCKT" },
+    @{ Edition = "Windows 11 Pro for Workstations"; Key = "DXG7C-N36C4-C4HTG-X4T3X-2YV77" },
+    @{ Edition = "Windows 11 Pro for Workstations N"; Key = "WYPNQ-8C467-V2W6J-TX4WX-WT2RQ" },
+    @{ Edition = "Windows 11 Pro Education"; Key = "8PTT6-RNW4C-6V7J2-C2D3X-MHBPB" },
+    @{ Edition = "Windows 11 Pro Education N"; Key = "GJTYN-HDMQY-FRR76-HVGC7-QPF8P" },
+    @{ Edition = "Windows 11 Education"; Key = "YNMGQ-8RYV3-4PGQ3-C8XTP-7CFBY" },
+    @{ Edition = "Windows 11 Education N"; Key = "84NGF-MHBT6-FXBX8-QWJK7-DRR8H" },
+    @{ Edition = "Windows 11 Enterprise"; Key = "XGVPP-NMH47-7TTHJ-W3FW7-8HV2C" },
+    @{ Edition = "Windows 11 Enterprise N"; Key = "WGGHN-J84D6-QYCPR-T7PJ7-X766F" },
+    @{ Edition = "Windows 11 Enterprise G"; Key = "FW7NV-4T673-HF4VX-9X4MM-B4H4T" },
+    @{ Edition = "Windows 11 Enterprise LTSC 2019"; Key = "M7XTQ-FN8P6-TTKYV-9D4CC-J462D" },
+    @{ Edition = "Windows 11 Enterprise N LTSC 2019"; Key = "92NFX-8DJQP-P6BBQ-THF9C-7CG2H" },
+    
+    # Windows 11 KMS Client Product Keys
+    @{ Edition = "Windows 11 Home"; Key = "TX9XD-98N7V-6WMQ6-BX7FG-H8Q99" },
+    @{ Edition = "Windows 11 Home N"; Key = "3KHY7-WNT83-DGQKR-F7HPR-844BM" },
+    @{ Edition = "Windows 11 Home Single Language"; Key = "7HNRX-D7KGG-3K4RQ-4WPJ4-YTDFH" },
+    @{ Edition = "Windows 11 Home Country Specific"; Key = "PVMJN-6DFY6-9CCP6-7BKTT-D3WVR" },
+    @{ Edition = "Windows 11 Pro"; Key = "W269N-WFGWX-YVC9B-4J6C9-T83GX" },
+    @{ Edition = "Windows 11 Pro N"; Key = "MH37W-N47XK-V7XM9-C7227-GCQG9" },
+    @{ Edition = "Windows 11 Pro for Workstations"; Key = "NRG8B-VKK3Q-CXVCJ-9G2XF-6Q84J" },
+    @{ Edition = "Windows 11 Pro for Workstations N"; Key = "9FNHH-K3HBT-3W4TD-6383H-6XYWF" },
+    @{ Edition = "Windows 11 Pro Education"; Key = "6TP4R-GNPTD-KYYHQ-7B7DP-J447Y" },
+    @{ Edition = "Windows 11 Pro Education N"; Key = "YVWGF-BXNMC-HTQYQ-CPQ99-66QFC" },
+    @{ Edition = "Windows 11 Education"; Key = "NW6C2-QMPVW-D7KKK-3GKT6-VCFB2" },
+    @{ Edition = "Windows 11 Education N"; Key = "2WH4N-8QGBV-H22JP-CT43Q-MDWWJ" },
+    @{ Edition = "Windows 11 Enterprise"; Key = "NPPR9-FWDCX-D2C8J-H872K-2YT43" },
+    @{ Edition = "Windows 11 Enterprise N"; Key = "DPH2V-TTNVB-4X9Q3-TJR4H-KHJW4" },
+    @{ Edition = "Windows 11 Enterprise G"; Key = "YYVX9-NTFWV-6MDM3-9PT4T-4M68B" },
+    @{ Edition = "Windows 11 Enterprise LTSC 2019"; Key = "M7XTQ-FN8P6-TTKYV-9D4CC-J462D" },
+
+    # Windows 10 KMS Client Product Keys
+    @{ Edition = "Windows 10 Home"; Key = "TX9XD-98N7V-6WMQ6-BX7FG-H8Q99" },
+    @{ Edition = "Windows 10 Home N"; Key = "3KHY7-WNT83-DGQKR-F7HPR-844BM" },
+    @{ Edition = "Windows 10 Pro"; Key = "W269N-WFGWX-YVC9B-4J6C9-T83GX" },
+    @{ Edition = "Windows 10 Pro N"; Key = "MH37W-N47XK-V7XM9-C7227-GCQG9" },
+    @{ Edition = "Windows 10 Pro for Workstations"; Key = "NRG8B-VKK3Q-CXVCJ-9G2XF-6Q84J" },
+    @{ Edition = "Windows 10 Enterprise LTSC 2019"; Key = "M7XTQ-FN8P6-TTKYV-9D4CC-J462D" },
+    @{ Edition = "Windows 10 Enterprise N LTSC 2019"; Key = "92NFX-8DJQP-P6BBQ-THF9C-7CG2H" },
+
+    # Windows 8.x Generic Keys
+    @{ Edition = "Windows 8.1 Pro"; Key = "GCRJD-8NW9H-F2CDX-CCM8D-9D6T9" },
+    @{ Edition = "Windows 8.1 Pro N"; Key = "HMCNV-VVBFX-7HMBH-CTY9B-B4FXY" },
+    @{ Edition = "Windows 8 Pro"; Key = "NG4HW-VH26C-733KW-K6F98-J8CK4" },
+    @{ Edition = "Windows 8 Pro N"; Key = "XCVCF-2NXM9-723PB-MHCB7-2RYQQ" },
+
+    # Windows Server KMS Client Product Keys
+    @{ Edition = "Windows Server 2022 Datacenter"; Key = "WX4NM-KYWYW-QJJR4-XV3QB-6VM33" },
+    @{ Edition = "Windows Server 2019 Datacenter"; Key = "WMDGN-G9PQG-XVVXX-R3X43-63DFG" },
+    @{ Edition = "Windows Server 2016 Datacenter"; Key = "CB7KF-BWN84-R7R2Y-793K2-8XDDG" }
+)
