@@ -2,7 +2,9 @@ $global:SystemInfoData = $null
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName WindowsFormsIntegration
 Add-Type -AssemblyName System.Windows.Forms
-$host.UI.RawUI.WindowTitle = "Info+" # Set the title of the console window
+$host.UI.RawUI.WindowTitle = "Info+"
+#$host.UI.RawUI.BufferSize = New-Object -TypeName System.Management.Automation.Host.Size(1, 10)
+$host.UI.RawUI.BackgroundColor = "Black"
 if ($PSScriptRoot) {
     # Load dependent scripts from the current directory during development
     . "$PSScriptRoot\CustomMessageBox.ps1"
@@ -20,10 +22,8 @@ if ($PSScriptRoot) {
     . "./TweaksSystem.ps1"
 }
 
-# Running memtest Windows Built in and create task to dispaly data after boot
 function Start-MemoryDiagnosticWithTask {
     try {
-        # Step 1: Start the Memory Diagnostic Tool
         Start-Process -FilePath "mdsched.exe"
         Write-Host "Memory Diagnostic Tool started successfully. The system will restart." -ForegroundColor Green
     } catch {
@@ -34,9 +34,8 @@ function Start-MemoryDiagnosticWithTask {
 
 function Show-SystemInfo {    
     param (
-    [string]$Command = "default"  # Accepts 'update' as a parameter
+        [string]$Command = "default" 
     )
-    Clear-Host
 
     # If 'update' parameter is passed, update the global data
     if ($Command -eq "update") {
@@ -50,46 +49,135 @@ function Show-SystemInfo {
             $global:SystemInfoData = $newData
         }
     }
-    Clear-Host
 
-    # If the global variable is not initialized, fetch system info
+    # Fetch SystemInfo if not initialized
     if (-not $global:SystemInfoData) {
         $global:SystemInfoData = Get-SystemInfo
     }
-    Clear-Host
-    # Explicitly reference $global:SystemInfoData
     $data = $global:SystemInfoData
+    Clear-Host
+
     Write-Host "=========================================================" -ForegroundColor Green
-    Write-Host "       2024 Developed with " -ForegroundColor White -NoNewline
-    Write-Host ([char]0x2665) -ForegroundColor Red -NoNewline
-    Write-Host " by" -NoNewline
-    Write-Host " Vunf1" -ForegroundColor Green -NoNewline
-    Write-Host " for " -NoNewline
-    Write-Host "HardStock" -ForegroundColor Cyan    
+    Write-Host "       Developed with " -ForegroundColor White -NoNewline; Write-Host ([char]0x2665) -ForegroundColor Red -NoNewline
+    Write-Host " by" -NoNewline; Write-Host " Vunf1" -ForegroundColor Green -NoNewline; Write-Host " for " -NoNewline; Write-Host "HardStock" -ForegroundColor Cyan    
     Write-Host "=========================================================" -ForegroundColor Green
     Write-Host "`nSystem Information:" -ForegroundColor Cyan
 
-    $data.DiskInfo  | Format-Table -AutoSize
-    Write-Host " "
-    #$data.BatteryInfo  | Format-Table -AutoSize
-    Write-Host " "
-
-    Write-Host "| Total Physical Memory      | $($data.MemoryInfo) GB            "
-    Write-Host "| CPU                        |" -NoNewline; Write-Host " $($data.CPUInfo)" -ForegroundColor $data.CPUColor
-    Write-Host "| GPU                        |" -NoNewline; Write-Host " $($data.GPUInfo)" -ForegroundColor $data.GPUColor
-    Write-Host "| Windows Version            | $($data.WindowsStatus)           "
-    Write-Host "| Activation Status          |" -NoNewline; Write-Host " $($data.ActivationStatus)" -ForegroundColor $data.ActivationColor
-    Write-Host " "
+    # Disk Info as a Table
+    if ($data.'Disk Info' -and $data.'Disk Info'.Count -gt 0) {
+        $data.'Disk Info' | Format-Table `
+            @{ Label = "Drive"; Expression = { $_.DriveLetter } }, `
+            @{ Label = "Disk Name"; Expression = { $_.DiskName } }, `
+            @{ Label = "Total Size (GB)"; Expression = { $_.TotalSizeGB } }, `
+            @{ Label = "Used Size (GB)"; Expression = { $_.UsedSizeGB } } -AutoSize
+    } else {
+        Write-Host "No Disk Information Available" -ForegroundColor Red
+    }
     
-    $productKeys = $data.ProductKeys
-    Write-Host "| Installed Product Key      |" -NoNewline
-    Write-Host " $($productKeys.InstalledKey)" -ForegroundColor $productKeys.InstalledKeyColor
+    Write-Host " ------------------------------------|------------------------------------------- "
+    Write-Host "| RAM Information                    | Slot Information                          |"
+    Write-Host " ------------------------------------|------------------------------------------- "
+    
+    # Prepare RAM Info Lines
+    $ramInfoLines = @(
+        ("| Total Memory         {0,-12} " -f $data.'Memory Info'.TotalMemory),
+        ("| Total Slots          {0,-12} " -f $data.'Memory Info'.TotalSlots),
+        ("| Used Slots           {0,-12} " -f $data.'Memory Info'.UsedSlots),
+        ("| Onboard Memory       {0,-12} " -f $data.'Memory Info'.OnboardMemory),
+        ("| Onboard Memory Size  {0,-12} " -f $data.'Memory Info'.OnboardSize)
+    )
+    
+    # Prepare Slot Details Lines
+    $slotDetailsLines = $data.'Memory Info'.SlotDetails | ForEach-Object {
+        "| {0,-10} {1,-8} {2,-8} {3,-12} |" -f $_.Slot, $_.Size, $_.Architecture, $_.Speed
+    }
+    
+    # Ensure Both Sections Have Equal Lines
+    $maxLines = [math]::Max($ramInfoLines.Count, $slotDetailsLines.Count)
+    $ramInfoLines += ("|                            |" * ($maxLines - $ramInfoLines.Count))
+    $slotDetailsLines += ("|                                           |" * ($maxLines - $slotDetailsLines.Count))
+    
+    # Combine and Output the Table
+    for ($i = 0; $i -lt $maxLines; $i++) {
+        Write-Host "$($ramInfoLines[$i]) $($slotDetailsLines[$i])"
+    }
+    
+    Write-Host "|------------------------------------|-------------------------------------------"
 
-    Write-Host "| OEM Product Key            |" -NoNewline
-    Write-Host " $($productKeys.OEMKey)" -ForegroundColor $productKeys.OEMKeyColor
-    Write-Host " "
+    # CPU Info
+    if ($data.'Processor Info'.Info -is [PSCustomObject]) {
+        $cpuColor = if ($data.'Processor Info'.Color -and [Enum]::IsDefined([System.ConsoleColor], $data.'Processor Info'.Color)) { 
+            $data.'Processor Info'.Color 
+        } else { "Gray" }
+
+        # Iterate over each processor and display its details
+        $first = $true
+        foreach ($cpu in $data.'Processor Info'.Info) {
+            if ($first) {
+                # Write the first CPU entry after the "| CPU                        |"
+                Write-Host "| CPU                        " -NoNewline
+                Write-Host " $($cpu.Name) $($cpu.MaxClockSpeed) $($cpu.Cores) $($cpu.LogicalProcessors) $($cpu.Socket)" -ForegroundColor $cpuColor
+                $first = $false
+            } else {
+                # Align additional CPU entries
+                Write-Host "                              $($cpu.Name) $($cpu.MaxClockSpeed) $($cpu.Cores) $($cpu.LogicalProcessors)  $($cpu.Socket)" -ForegroundColor $cpuColor
+            }
+        }
+    } else {
+        Write-Host "| CPU                        No CPU information available" -ForegroundColor Red
+    }
+
+    # GPU Info Display
+    if ($data.'GPU Info'.GPUs -and $data.'GPU Info'.GPUs.Count -gt 0) {
+        $first = $true
+        foreach ($gpu in $data.'GPU Info'.GPUs) {
+            $gpuColor = if ($gpu.Color -and [Enum]::IsDefined([System.ConsoleColor], $gpu.Color)) { 
+                $gpu.Color 
+            } else { "Gray" }
+
+            if ($first) {
+                # Write the first GPU entry after the "| GPU                        |"
+                Write-Host "| GPU                        " -NoNewline; Write-Host " $($gpu.Name) ($($gpu.Dedicated))" -ForegroundColor $gpuColor
+                $first = $false
+            } else {
+                # Indent additional GPU entries to align with the first one
+                Write-Host "                              $($gpu.Name) ($($gpu.Dedicated))" -ForegroundColor $gpuColor
+            }
+        }
+    } else {
+        Write-Host "| GPU                        No GPU information available" -ForegroundColor Red
+    }
+
+
+
+
+
+    # Windows Version
+    Write-Host "| Windows Version             $($data.'Windows Version')"
+
+    # Activation Status
+    $activationColor = if ($data.'Activation Details'.ActivationColor -and [Enum]::IsDefined([System.ConsoleColor], $data.'Activation Details'.ActivationColor)) { 
+        $data.'Activation Details'.ActivationColor 
+    } else { "Gray" }
+    Write-Host "| Activation Status          " -NoNewline
+    Write-Host " $($data.'Activation Details'.Status)" -ForegroundColor $activationColor
+
+    # Product Keys
+    $productKeys = $data.'System Product Keys'
+    $installedKeyColor = if ($productKeys.InstalledKeyColor -and [Enum]::IsDefined([System.ConsoleColor], $productKeys.InstalledKeyColor)) { 
+        $productKeys.InstalledKeyColor 
+    } else { "Gray" }
+    Write-Host "| Installed Product Key      " -NoNewline
+    Write-Host " $($productKeys.InstalledKey)" -ForegroundColor $installedKeyColor
+
+    $oemKeyColor = if ($productKeys.OEMKeyColor -and [Enum]::IsDefined([System.ConsoleColor], $productKeys.OEMKeyColor)) { 
+        $productKeys.OEMKeyColor 
+    } else { "Gray" }
+    Write-Host "| OEM Product Key            " -NoNewline
+    Write-Host " $($productKeys.OEMKey)" -ForegroundColor $oemKeyColor
 
 }
+
 Clear-Host
 Start-Files
 Get-CameraAndOpenApp
@@ -161,10 +249,15 @@ function SystemInfoOption {
              return }
     }
 }
-
 function Show-SystemInfoSubmenu {
     while ($true) {
         Show-SystemInfoMenu
+        
+        # Flush input buffer by reading all available characters
+        while ([System.Console]::KeyAvailable) {
+            [System.Console]::ReadKey($true) | Out-Null
+        }
+
         do {
             $key = [System.Console]::ReadKey($true)
         } while (-not ($key.KeyChar -match '^[0-4]$'))  # Only accept valid input
@@ -173,6 +266,7 @@ function Show-SystemInfoSubmenu {
         if ($key.KeyChar -eq "0") { break }
     }
 }
+
 
 # Drivers and Tools Menu
 function Show-DriversToolsMenu {
@@ -216,14 +310,20 @@ function DriversToolsOption {
 function Show-DriversToolsSubmenu {
     while ($true) {
         Show-DriversToolsMenu
+        
+        while ([System.Console]::KeyAvailable) {
+            [System.Console]::ReadKey($true) | Out-Null
+        }
+
         do {
             $key = [System.Console]::ReadKey($true)
-        } while (-not ($key.KeyChar -match '^[0-4]$'))  # Only accept valid input
+        } while (-not ($key.KeyChar -match '^[0-4]$'))
 
         DriversToolsOption $key
         if ($key.KeyChar -eq "0") { break }
     }
 }
+
 
 # System Maintenance Menu
 function Show-MaintenanceMenu {
@@ -257,23 +357,33 @@ function MaintenanceOption {
 function Show-MaintenanceSubmenu {
     while ($true) {
         Show-MaintenanceMenu
+        
+        while ([System.Console]::KeyAvailable) {
+            [System.Console]::ReadKey($true) | Out-Null
+        }
+
         do {
             $key = [System.Console]::ReadKey($true)
-        } while (-not ($key.KeyChar -match '^[0-2]$'))  # Only accept valid input
+        } while (-not ($key.KeyChar -match '^[0-2]$'))
 
         MaintenanceOption $key
         if ($key.KeyChar -eq "0") { break }
     }
 }
 
-
-# Main Loop
 # Main Loop
 while ($true) {
     Show-MainMenu
+
+    # Flush input buffer by reading all available characters
+    while ([System.Console]::KeyAvailable) {
+        [System.Console]::ReadKey($true) | Out-Null
+    }
+
+    # Read valid input
     do {
         $key = [System.Console]::ReadKey($true)
-    } while (-not ($key.KeyChar -match '^[0-3]$'))  # Only accept valid input
+    } while (-not ($key.KeyChar -match '^[0-3]$'))
 
     MainMenuOption $key
 }
