@@ -84,7 +84,7 @@ function Show-SystemInfo {
         ("| Total Slots          {0,-12} " -f $data.'Memory Info'.TotalSlots),
         ("| Used Slots           {0,-12} " -f $data.'Memory Info'.UsedSlots),
         ("| Onboard Memory       {0,-12} " -f $data.'Memory Info'.OnboardMemory),
-        ("| Onb Mem Size '1st Slot or total'  {0,-12} " -f $data.'Memory Info'.OnboardSize)
+        ("| Onb Mem Size         {0,-12} " -f $data.'Memory Info'.OnboardSize)
     )
     
     # Prepare Slot Details Lines
@@ -109,7 +109,7 @@ function Show-SystemInfo {
         $cpuColor = if ($data.'Processor Info'.Color -and [Enum]::IsDefined([System.ConsoleColor], $data.'Processor Info'.Color)) { 
             $data.'Processor Info'.Color 
         } else { "Gray" }
-        
+
         # Iterate over each processor and display its details
         $first = $true
         foreach ($cpu in $data.'Processor Info'.Info) {

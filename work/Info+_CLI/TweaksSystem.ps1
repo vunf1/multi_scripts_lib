@@ -94,22 +94,39 @@ function Register-OEMKey {
             return
         }
         $tasks = @(
-            @{ Name = "Gathering OEM Key"; Task = { Write-Host "OEM Key Found: $oemKey" -ForegroundColor Yellow } },
-            @{ Name = "Reinstalling OEM Key"; Task = {
-                $installKeyCommand = "cscript.exe $env:SystemRoot\System32\slmgr.vbs /ipk $oemKey"
-                Invoke-Expression $installKeyCommand
-            } },
-            @{ Name = "Activating OEM Key"; Task = {
-                $activateCommand = "cscript.exe $env:SystemRoot\System32\slmgr.vbs /ato"
-                Invoke-Expression $activateCommand
-            } },
-            @{ Name = "Validating Activation Status"; Task = {
-                $statusCommand = "cscript.exe $env:SystemRoot\System32\slmgr.vbs /dli"
-                $activationStatus = Invoke-Expression $statusCommand
-                Write-Host "Activation Status:" -ForegroundColor Green
-                Write-Host $activationStatus
-            } }
+            @{ 
+                Name = "Gathering OEM Key"; 
+                Task = { Write-Host "OEM Key Found: $oemKey" -ForegroundColor Yellow } 
+            },
+            @{ 
+                Name = "Reinstalling OEM Key"; 
+                Task = {
+                    $installKeyCommand = "cscript.exe"
+                    $arguments = "$env:SystemRoot\System32\slmgr.vbs /ipk $oemKey"
+                    Start-Process -FilePath $installKeyCommand -ArgumentList $arguments -NoNewWindow -Wait
+                } 
+            },
+            @{ 
+                Name = "Activating OEM Key"; 
+                Task = {
+                    $activateCommand = "cscript.exe"
+                    $arguments = "$env:SystemRoot\System32\slmgr.vbs /ato"
+                    Start-Process -FilePath $activateCommand -ArgumentList $arguments -NoNewWindow -Wait
+                } 
+            },
+            @{ 
+                Name = "Validating Activation Status"; 
+                Task = {
+                    $statusCommand = "cscript.exe"
+                    $arguments = "$env:SystemRoot\System32\slmgr.vbs /dli"
+                    $process = Start-Process -FilePath $statusCommand -ArgumentList $arguments -NoNewWindow -Wait -PassThru
+                    $output = $process.StandardOutput.ReadToEnd()
+                    Write-Host "Activation Status:" -ForegroundColor Green
+                    Write-Host $output
+                } 
+            }
         )
+        
 
         $totalTasks = $tasks.Count
         $progressCount = 0
