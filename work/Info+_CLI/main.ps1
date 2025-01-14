@@ -109,7 +109,7 @@ function Show-SystemInfo {
         $cpuColor = if ($data.'Processor Info'.Color -and [Enum]::IsDefined([System.ConsoleColor], $data.'Processor Info'.Color)) { 
             $data.'Processor Info'.Color 
         } else { "Gray" }
-
+        
         # Iterate over each processor and display its details
         $first = $true
         foreach ($cpu in $data.'Processor Info'.Info) {

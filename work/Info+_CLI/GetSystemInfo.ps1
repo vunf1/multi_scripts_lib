@@ -41,17 +41,13 @@ function Get-DiskInfo {
 
         # Ensure $Disks is treated as an array
         $Disks = @($Disks)
-        Write-Debug "Disk objects count: $($Disks.Count)"
 
         if ($Disks.Count -gt 0) {
-            Write-Debug "Returning disk information."
             return $Disks
         } else {
-            Write-Debug "No disks detected."
             return @([PSCustomObject]@{ DriveLetter = "None"; DiskName = "No Disk Found"; TotalSizeGB = "0 GB"; UsedSizeGB = "0 GB" })
         }
     } catch {
-        Write-Debug "An error occurred while retrieving disk information: $_"
         return @([PSCustomObject]@{ DriveLetter = "Error"; DiskName = "Error"; TotalSizeGB = "Error"; UsedSizeGB = "Error" })
     }
 }
