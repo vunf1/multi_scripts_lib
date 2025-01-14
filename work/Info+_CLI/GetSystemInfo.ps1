@@ -5,33 +5,33 @@
 }else {
     . "./CommandHelpers.ps1"
 } #>
+
 function Get-DiskInfo {
     try {
-        # Initialize the result array
         $Disks = @()
 
-        # Fetch volumes and iterate over them
-        Get-Volume | Where-Object { $null -ne $_.DriveLetter } | ForEach-Object {
+        $volumes = Get-Volume | Where-Object { $null -ne $_.DriveLetter }
+        Write-Debug "Volumes retrieved: $($volumes.Count)"
+
+        foreach ($volume in $volumes) {
             $diskName = "Unknown"
-            $totalSizeGB = [math]::round($_.Size / 1GB, 2)
-            $usedSizeGB = [math]::round(($_.Size - $_.SizeRemaining) / 1GB, 2)
+            $totalSizeGB = [math]::round($volume.Size / 1GB, 2)
+            $usedSizeGB = [math]::round(($volume.Size - $volume.SizeRemaining) / 1GB, 2)
 
             try {
 
-                $partition = Get-Partition -DriveLetter $_.DriveLetter -ErrorAction SilentlyContinue
+                $partition = Get-Partition -DriveLetter $volume.DriveLetter -ErrorAction SilentlyContinue
                 if ($partition) {
                     $diskNumber = $partition.DiskNumber
                     $physicalDisk = Get-PhysicalDisk | Where-Object { $_.DeviceID -eq $diskNumber }
-                    if ($physicalDisk) {
-                        $diskName = $physicalDisk.FriendlyName
-                    }
+                    if ($physicalDisk) {$diskName = $physicalDisk.FriendlyName}
                 }
             } catch {
-                Write-Host "Error retrieving disk details for drive $_.DriveLetter: $_" -ForegroundColor Yellow
+                Write-Debug "Error retrieving disk details for DriveLetter=$($volume.DriveLetter): $_"
             }
 
             $diskObject = [PSCustomObject]@{
-                DriveLetter = $_.DriveLetter
+                DriveLetter = $volume.DriveLetter
                 DiskName    = $diskName
                 TotalSizeGB = "$totalSizeGB GB"
                 UsedSizeGB  = "$usedSizeGB GB"
@@ -39,14 +39,22 @@ function Get-DiskInfo {
             $Disks += $diskObject
         }
 
-        # Return the disk information array
-        return $Disks
+        # Ensure $Disks is treated as an array
+        $Disks = @($Disks)
+        Write-Debug "Disk objects count: $($Disks.Count)"
+
+        if ($Disks.Count -gt 0) {
+            Write-Debug "Returning disk information."
+            return $Disks
+        } else {
+            Write-Debug "No disks detected."
+            return @([PSCustomObject]@{ DriveLetter = "None"; DiskName = "No Disk Found"; TotalSizeGB = "0 GB"; UsedSizeGB = "0 GB" })
+        }
     } catch {
-        Write-Host "An error occurred while retrieving disk information: $_" -ForegroundColor Red
+        Write-Debug "An error occurred while retrieving disk information: $_"
+        return @([PSCustomObject]@{ DriveLetter = "Error"; DiskName = "Error"; TotalSizeGB = "Error"; UsedSizeGB = "Error" })
     }
 }
-
-
 
 function Get-TotalSticksRam {
     try {

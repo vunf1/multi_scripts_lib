@@ -84,12 +84,12 @@ function Show-SystemInfo {
         ("| Total Slots          {0,-12} " -f $data.'Memory Info'.TotalSlots),
         ("| Used Slots           {0,-12} " -f $data.'Memory Info'.UsedSlots),
         ("| Onboard Memory       {0,-12} " -f $data.'Memory Info'.OnboardMemory),
-        ("| Onboard Memory Size  {0,-12} " -f $data.'Memory Info'.OnboardSize)
+        ("| Onb Mem Size '1st Slot or total'  {0,-12} " -f $data.'Memory Info'.OnboardSize)
     )
     
     # Prepare Slot Details Lines
     $slotDetailsLines = $data.'Memory Info'.SlotDetails | ForEach-Object {
-        "| {0,-10} {1,-8} {2,-8} {3,-12} |" -f $_.Slot, $_.Size, $_.Architecture, $_.Speed
+        "| {0,-10} {1,-8} {2,-8} {3,-12} " -f $_.Slot, $_.Size, $_.Architecture, $_.Speed
     }
     
     # Ensure Both Sections Have Equal Lines
