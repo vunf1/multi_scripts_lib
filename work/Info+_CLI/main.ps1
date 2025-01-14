@@ -2,7 +2,55 @@ $global:SystemInfoData = $null
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName WindowsFormsIntegration
 Add-Type -AssemblyName System.Windows.Forms
+function Set-ConsoleWindowPosition {
+    param (
+        [int]$OffsetX = 0,  # X-offset from the right edge of the screen
+        [int]$OffsetY = 0   # Y-offset from the bottom edge of the screen
+    )
+
+    # Get the console window handle
+    $consoleHandle = [System.Diagnostics.Process]::GetCurrentProcess().MainWindowHandle
+
+    # Import the user32.dll functions
+    Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public class User32 {
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
+
+    public struct RECT {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+}
+"@
+
+    # Get screen dimensions
+    $screenWidth = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width
+    $screenHeight = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height
+
+    # Get current console window size
+    $rect = New-Object User32+RECT
+    [User32]::GetWindowRect($consoleHandle, [ref]$rect)
+
+    # Calculate new position
+    $windowWidth = $rect.Right - $rect.Left
+    $windowHeight = $rect.Bottom - $rect.Top
+    $newX = $screenWidth - $windowWidth - $OffsetX
+    $newY = $screenHeight - $windowHeight - $OffsetY
+
+    # Move the window
+    [User32]::MoveWindow($consoleHandle, $newX, $newY, $windowWidth, $windowHeight, $true)
+}
 $host.UI.RawUI.WindowTitle = "Info+"
+Set-ConsoleWindowPosition -OffsetX 10 -OffsetY 10
 #$host.UI.RawUI.BufferSize = New-Object -TypeName System.Management.Automation.Host.Size(1, 10)
 $host.UI.RawUI.BackgroundColor = "Black"
 <# if ($PSScriptRoot) {
