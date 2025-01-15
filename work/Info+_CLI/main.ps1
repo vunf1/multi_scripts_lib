@@ -253,6 +253,7 @@ function MainMenuOption {
         "3" { Show-MaintenanceSubmenu }
         "0" { 
             Write-Host "`nExiting the program. Goodbye!" -ForegroundColor Red
+            $global:exitProgram = $true
             exit
         }
     }
@@ -424,18 +425,16 @@ function Show-MaintenanceSubmenu {
 }
 
 # Main Loop
-while ($true) {
+$global:exitProgram = $false
+while (-not $global:exitProgram) {
     Show-MainMenu
-
     # Flush input buffer by reading all available characters
     while ([System.Console]::KeyAvailable) {
         [System.Console]::ReadKey($true) | Out-Null
     }
-
-    # Read valid input
     do {
         $key = [System.Console]::ReadKey($true)
-    } while (-not ($key.KeyChar -match '^[0-3]$'))
+    } while (-not ($key.KeyChar -match '^[0-3]$'))  # Only accept valid input
 
     MainMenuOption $key
 }
