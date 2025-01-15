@@ -78,7 +78,7 @@ function Use-ConfigurePowerSettings {
 function Register-OEMKey {
     try {
         # Retrieve the OEM key
-        $oemKey = (Get-CimInstance -ClassName SoftwareLicensingService).OA3xOriginalProductKey
+        $oemKey = Get-OEMKey 
         if (-not $oemKey) {
             Write-Host "OEM Key not found on this system." -ForegroundColor Red
             return
@@ -151,20 +151,21 @@ function Register-OEMKey {
         Write-Host "An error occurred: $_" -ForegroundColor Red
     }
 }
-
 function Start-ActivationScript {
     try {
-        
         $scriptContent = Invoke-RestMethod -Uri "https://get.activated.win"
 
         $scriptBlock = [ScriptBlock]::Create($scriptContent)
 
-        Write-Host "Executing Activation Script..." -ForegroundColor Green
-        Invoke-Command -ScriptBlock $scriptBlock
+        Write-Host "Starting Windows/Office Activation." -ForegroundColor Green
+        Start-Job -ScriptBlock $scriptBlock | Out-Null
 
-        Write-Host "Activation Script executed successfully." -ForegroundColor Green
+        Write-Host "Activation Windows/Office successfully open." -ForegroundColor Green
+        return
     } catch {
         Write-Host "An error occurred while fetching or executing the Activation Script: $_" -ForegroundColor Red
     }
 }
+
+
 
