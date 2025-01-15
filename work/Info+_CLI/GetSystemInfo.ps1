@@ -8,28 +8,56 @@
 
 function Get-DiskInfo {
     try {
+        # Initialize the result array
         $Disks = @()
 
+        # Retrieve volumes and ensure they're valid
         $volumes = Get-Volume | Where-Object { $null -ne $_.DriveLetter }
+        if (-not $volumes -or $volumes.Count -eq 0) {
+            Write-Debug "No volumes found or no volumes with drive letters."
+            return @([PSCustomObject]@{ DriveLetter = "None"; DiskName = "No Disk Found"; TotalSizeGB = "0 GB"; UsedSizeGB = "0 GB" })
+        }
+
         Write-Debug "Volumes retrieved: $($volumes.Count)"
 
+        # Process each volume
         foreach ($volume in $volumes) {
             $diskName = "Unknown"
-            $totalSizeGB = [math]::round($volume.Size / 1GB, 2)
-            $usedSizeGB = [math]::round(($volume.Size - $volume.SizeRemaining) / 1GB, 2)
+            $totalSizeGB = if ($null -ne $volume.Size ) { [math]::round($volume.Size / 1GB, 2) } else { 0 }
+            $usedSizeGB = if ($null -ne $volume.Size -and $null -ne $volume.SizeRemaining  ) { [math]::round(($volume.Size - $volume.SizeRemaining) / 1GB, 2) } else { 0 }
 
             try {
-
+                # Retrieve partition and physical disk details
                 $partition = Get-Partition -DriveLetter $volume.DriveLetter -ErrorAction SilentlyContinue
                 if ($partition) {
                     $diskNumber = $partition.DiskNumber
                     $physicalDisk = Get-PhysicalDisk | Where-Object { $_.DeviceID -eq $diskNumber }
-                    if ($physicalDisk) {$diskName = $physicalDisk.FriendlyName}
+                    if ($physicalDisk) {
+                        $diskName = $physicalDisk.FriendlyName
+                    } else {
+                        Write-Host "No matching physical disk found for DiskNumber=$diskNumber."
+                    }
+                } else {
+                    Write-Host "No partition found for DriveLetter=$($volume.DriveLetter)."
                 }
             } catch {
-                Write-Debug "Error retrieving disk details for DriveLetter=$($volume.DriveLetter): $_"
+                Write-Host "Error retrieving disk details for DriveLetter=$($volume.DriveLetter): $_"
             }
 
+            # Fallback: Attempt to retrieve disk data from Win32_LogicalDisk
+            if ($diskName -eq "Unknown") {
+                try {
+                    $logicalDisk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID = '$($volume.DriveLetter):'"
+                    if ($logicalDisk) {
+                        $diskName = $logicalDisk.VolumeName
+                        Write-Host "Fallback used Win32_LogicalDisk for DriveLetter=$($volume.DriveLetter): DiskName=$diskName."
+                    }
+                } catch {
+                    Write-Host "Fallback retrieval using Win32_LogicalDisk failed for DriveLetter=$($volume.DriveLetter): $_"
+                }
+            }
+
+            # Add the disk details to the result array
             $diskObject = [PSCustomObject]@{
                 DriveLetter = $volume.DriveLetter
                 DiskName    = $diskName
@@ -39,18 +67,19 @@ function Get-DiskInfo {
             $Disks += $diskObject
         }
 
-        # Ensure $Disks is treated as an array
-        $Disks = @($Disks)
-
+        # Return results or a default object if no valid disks are found
         if ($Disks.Count -gt 0) {
             return $Disks
         } else {
+            Write-Host "No valid disks found after processing volumes."
             return @([PSCustomObject]@{ DriveLetter = "None"; DiskName = "No Disk Found"; TotalSizeGB = "0 GB"; UsedSizeGB = "0 GB" })
         }
     } catch {
+        Write-Host "An error occurred while retrieving disk information: $_"
         return @([PSCustomObject]@{ DriveLetter = "Error"; DiskName = "Error"; TotalSizeGB = "Error"; UsedSizeGB = "Error" })
     }
 }
+
 
 function Get-TotalSticksRam {
     try {
@@ -69,13 +98,13 @@ function Get-TotalSticksRam {
         } else {
             0
         }
-        
-        # Get the value of each memory slot
+
+        # Get details for each memory slot
         $slotDetails = $memoryModules | ForEach-Object {
             [PSCustomObject]@{
-                Slot = $_.DeviceLocator
-                Size = "$([math]::round($_.Capacity / 1GB, 2)) GB"
-                Architecture = Get-MemoryTypeName -MemoryType $_.SMBIOSMemoryType
+                Slot          = $_.DeviceLocator
+                Size          = if ($_.Capacity) { "$([math]::round($_.Capacity / 1GB, 2)) GB" } else { "Unknown" }
+                Architecture  = Get-MemoryTypeName -MemoryType $_.SMBIOSMemoryType
                 Speed         = if ($_.Speed) { "$($_.Speed) MHz" } else { "Unknown" }
             }
         }
@@ -91,9 +120,17 @@ function Get-TotalSticksRam {
         }
     } catch {
         Write-Error "An error occurred while retrieving memory information: $_"
-        return $null
+        return @([PSCustomObject]@{
+            TotalMemory     = "Error"
+            TotalSlots      = "Error"
+            UsedSlots       = "Error"
+            OnboardMemory   = "Error"
+            OnboardSize     = "Error"
+            SlotDetails     = @([PSCustomObject]@{ Slot = "Error"; Size = "Error"; Architecture = "Error"; Speed = "Error";})
+        })
     }
 }
+
 
 
 function Get-ProcessorInfo {
@@ -272,12 +309,7 @@ function Show-WindowsProductKeys {
         }
 
         # Retrieve the OEM key
-        $oemKey = try {
-            (Get-CimInstance -ClassName SoftwareLicensingService -ErrorAction Stop).OA3xOriginalProductKey
-        } catch {
-            "Not Found"
-        }
-
+        $oemKey = Get-OEMKey
         # Assign colors for display
         $installedKeyColor = if ($installedKey -ne "Not Found") { "Yellow" } else { "Red" }
         $oemKeyColor = if ($oemKey -eq "Not Found") { "Yellow" } elseif ($oemKey -eq "Error") { "Red" } else { "Green" }
@@ -303,91 +335,168 @@ function Show-WindowsProductKeys {
         }
     }
 }
-
-
-function Get-CameraAndOpenApp {
+function Get-OEMKey{
     try {
-        Write-Host "Checking for camera devices..." -ForegroundColor Yellow
+        $oemKey = $null
 
-        # Check for camera devices using multiple approaches
-        $cameraDevices = @()
-
-        # Primary check using Win32_PnPEntity
-        $cameraDevices += Get-CimInstance -ClassName Win32_PnPEntity -ErrorAction SilentlyContinue | Where-Object {
-            $_.Name -match "Camera|Webcam|Imaging Device" -or $_.PNPClass -eq "Image"
+        # Primary method: Using SoftwareLicensingService class
+        try {
+            #Write-Host "Attempting to retrieve OEM key using SoftwareLicensingService."
+            $oemKey = (Get-CimInstance -ClassName SoftwareLicensingService -ErrorAction Stop).OA3xOriginalProductKey
+        } catch {
+            Write-Host "SoftwareLicensingService method failed: $_"
         }
 
-        # Fallback check using Win32_USBHub (for USB-connected cameras)
-        $cameraDevices += Get-CimInstance -ClassName Win32_USBHub -ErrorAction SilentlyContinue | Where-Object {
-            $_.Name -match "Camera|Webcam"
-        }
-
-        # Remove duplicates and ensure valid results
-        $cameraDevices = $cameraDevices | Where-Object { $_ -ne $null } | Select-Object -Unique
-
-        if ($cameraDevices -and $cameraDevices.Count -gt 0) {
-            Write-Host "Camera device(s) found:" -ForegroundColor Green
-            $cameraDevices | ForEach-Object {
-                Write-Host "Name: $($_.Name)"
-            }
-
-            # Attempt to open the default Camera app
+        # Fallback 1: Using WMI query
+        if (-not $oemKey -or $oemKey -eq "") {
             try {
-                Start-Process -FilePath "microsoft.windows.camera:"
-                Write-Host "Opening the default Camera app..." -ForegroundColor Green
+                #Write-Host "Attempting to retrieve OEM key using WMI query."
+                $oemKey = Get-WmiObject -Query "SELECT OA3xOriginalProductKey FROM SoftwareLicensingService" | Select-Object -ExpandProperty OA3xOriginalProductKey
             } catch {
-                Write-Host "Default Camera app launch failed. Attempting fallback options..." -ForegroundColor Yellow
+                Write-Host "WMI query method failed: $_"
+            }
+        }
 
-                # Fallbacks
-                if (-not (Open-CameraFallback)) {
-                    Write-Host "All attempts to open the Camera app failed. Consider using an alternative application." -ForegroundColor Red
+        # Fallback 2: Registry method
+        if (-not $oemKey -or $oemKey -eq "") {
+            try {
+                #Write-Host "Attempting to retrieve OEM key from registry."
+                $oemKey = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SoftwareProtectionPlatform" -Name "BackupProductKeyDefault" -ErrorAction Stop | Select-Object -ExpandProperty BackupProductKeyDefault
+            } catch {
+                Write-Host "Registry method failed: $_"
+            }
+        }
+
+        # Fallback 3: Using slmgr.vbs
+        if (-not $oemKey -or $oemKey -eq "") {
+            try {
+                #Write-Host "Attempting to retrieve OEM key using slmgr.vbs."
+                $slmgrOutput = cscript /nologo $env:SystemRoot\System32\slmgr.vbs /dli | Out-String
+                $oemKey = ($slmgrOutput -split "`n") -match "OA3xOriginalProductKey" | ForEach-Object { ($_ -split ":")[1].Trim() }
+            } catch {
+                Write-Host "slmgr.vbs method failed: $_"
+            }
+        }
+
+        # Validate OEM key or return Not Found
+        if (-not $oemKey -or $oemKey -eq "") {
+            #Write-Host "OEM key retrieval failed. Returning 'Not Found'."
+            return "Not Found"
+        } else {
+            #Write-Host "OEM key retrieved successfully: $oemKey"
+            return $oemKey
+        }
+    } catch {
+        #Write-Host "An unexpected error occurred while retrieving OEM key: $_"
+        return "Error"
+    }
+
+}
+function Start-CameraAppInBackground {
+    try {
+        # Define the script content as a script block
+        $scriptContent = {
+            function Get-CameraAndOpenApp {
+                try {
+                    Write-Host "Checking for camera devices..." -ForegroundColor Yellow
+            
+                    # Check for camera devices using multiple approaches
+                    $cameraDevices = @()
+            
+                    # 1st check using Win32_PnPEntity
+                    $cameraDevices += Get-CimInstance -ClassName Win32_PnPEntity -ErrorAction SilentlyContinue | Where-Object {
+                        $_.Name -match "Camera|Webcam|Imaging Device" -or $_.PNPClass -eq "Image"
+                    }
+            
+                    # 2nd check using Win32_USBHub (for USB-connected cameras)
+                    $cameraDevices += Get-CimInstance -ClassName Win32_USBHub -ErrorAction SilentlyContinue | Where-Object {
+                        $_.Name -match "Camera|Webcam"
+                    }
+            
+                    # 3rd check using MSFT_PhysicalCamera (specific to integrated cameras)
+                    $cameraDevices += Get-CimInstance -Namespace "Root\CIMv2\DeviceMap" -ClassName MSFT_PhysicalCamera -ErrorAction SilentlyContinue | Where-Object {
+                        $_.Name -match "Camera|Webcam"
+                    }
+            
+                    # 4th check for Windows Imaging Device interface
+                    $cameraDevices += Get-WmiObject -Namespace "Root\CIMv2" -Query "SELECT * FROM Win32_PnPEntity WHERE Service = 'usbvideo'" -ErrorAction SilentlyContinue
+            
+                    # Remove duplicates and ensure valid results
+                    $cameraDevices = $cameraDevices | Where-Object { $_ -ne $null } | Select-Object -Unique
+            
+                    if ($cameraDevices -and $cameraDevices.Count -gt 0) {
+                        Write-Host "Camera device(s) found:" -ForegroundColor Green
+                        $cameraDevices | ForEach-Object {
+                            Write-Host "Name: $($_.Name)"
+                        }
+            
+                        # Attempt to open the default Camera app
+                        try {
+                            Start-Process -FilePath "microsoft.windows.camera:"
+                            Write-Host "Opening the default Camera app..." -ForegroundColor Green
+                        } catch {
+                            Write-Host "Default Camera app launch failed. Attempting fallback options..." -ForegroundColor Yellow
+            
+                            # Fallbacks
+                            if (-not (Open-CameraFallback)) {
+                                Write-Host "All attempts to open the Camera app failed. Consider using an alternative application." -ForegroundColor Red
+                            }
+                        }
+                    } else {
+                        Write-Host "No camera devices detected on this machine. Camera app will not be opened." -ForegroundColor Yellow
+                    }
+                } catch {
+                    Write-Host "An error occurred while checking for camera drivers: $_" -ForegroundColor Red
                 }
             }
-        } else {
-            Write-Host "No camera devices detected on this machine. Camera app will not be opened." -ForegroundColor Yellow
+            
+            function Open-CameraFallback {
+                try {
+                    # Fallback 1: Use explorer with URI
+                    Start-Process -FilePath "explorer.exe" -ArgumentList "microsoft.windows.camera:"
+                    Write-Host "Fallback: Opened Camera app via explorer.exe." -ForegroundColor Green
+                    return $true
+                } catch {
+                    Write-Host "Fallback 1 failed: Could not open Camera app via explorer." -ForegroundColor Red
+                }
+            
+                try {
+                    # Fallback 2: Launch directly from package path
+                    $cameraPath = "C:\Windows\SystemApps\Microsoft.WindowsCamera_cw5n1h2txyewy\WindowsCamera.exe"
+                    if (Test-Path $cameraPath) {
+                        Start-Process -FilePath $cameraPath
+                        Write-Host "Fallback: Opened Camera app directly from package path." -ForegroundColor Green
+                        return $true
+                    } else {
+                        Write-Host "Fallback 2 failed: Camera app not found in the expected path." -ForegroundColor Red
+                    }
+                } catch {
+                    Write-Host "Fallback 2 failed: Unable to launch Camera app from package path." -ForegroundColor Red
+                }
+            
+                try {
+                    # Fallback 3: Open shell AppsFolder
+                    Start-Process -FilePath "shell:AppsFolder\Microsoft.WindowsCamera_cw5n1h2txyewy!App"
+                    Write-Host "Fallback: Opened Camera app using shell:AppsFolder." -ForegroundColor Green
+                    return $true
+                } catch {
+                    Write-Host "Fallback 3 failed: Could not open Camera app using shell:AppsFolder." -ForegroundColor Red
+                }
+                return $false
+            }
+            
         }
-    } catch {
-        Write-Host "An error occurred while checking for camera drivers: $_" -ForegroundColor Red
-    }
-}
+        Start-Job -ScriptBlock $scriptContent | Out-Null
 
-function Open-CameraFallback {
-    try {
-        # Fallback 1: Use explorer with URI
-        Start-Process -FilePath "explorer.exe" -ArgumentList "microsoft.windows.camera:"
-        Write-Host "Fallback: Opened Camera app via explorer.exe." -ForegroundColor Green
-        return $true
-    } catch {
-        Write-Host "Fallback 1 failed: Could not open Camera app via explorer." -ForegroundColor Red
-    }
-
-    try {
-        # Fallback 2: Launch directly from package path
-        $cameraPath = "C:\Windows\SystemApps\Microsoft.WindowsCamera_cw5n1h2txyewy\WindowsCamera.exe"
-        if (Test-Path $cameraPath) {
-            Start-Process -FilePath $cameraPath
-            Write-Host "Fallback: Opened Camera app directly from package path." -ForegroundColor Green
-            return $true
-        } else {
-            Write-Host "Fallback 2 failed: Camera app not found in the expected path." -ForegroundColor Red
+        Write-Host "Camera check started successfully in the background." -ForegroundColor Green
+   
+        } catch {
+            Write-Host "An error occurred while starting the Camera: $_" -ForegroundColor Red
         }
-    } catch {
-        Write-Host "Fallback 2 failed: Unable to launch Camera app from package path." -ForegroundColor Red
     }
 
-    try {
-        # Fallback 3: Open shell AppsFolder
-        Start-Process -FilePath "shell:AppsFolder\Microsoft.WindowsCamera_cw5n1h2txyewy!App"
-        Write-Host "Fallback: Opened Camera app using shell:AppsFolder." -ForegroundColor Green
-        return $true
-    } catch {
-        Write-Host "Fallback 3 failed: Could not open Camera app using shell:AppsFolder." -ForegroundColor Red
-    }
-    return $false
-}
 
 function Get-SystemInfo {
-    Write-Host "`n***** IF STUCK PRESS [ENTER] *****" -ForegroundColor Red -NoNewline
     Write-Host " `nRefreshing System Information..." -ForegroundColor Yellow
 
     # Define tasks dynamically with a script block
@@ -406,23 +515,19 @@ function Get-SystemInfo {
 
     $systemInfo = [PSCustomObject]@{}
 
+    Write-Host "`nIF STUCK PRESS [ENTER] <<<< " -ForegroundColor Red
     for ($i = 0; $i -lt $totalTasks; $i++) {
         $taskName = $tasks[$i].Name
         $task = $tasks[$i].Task
 
-        Write-Host "`nStarting task: $taskName" -ForegroundColor Cyan
-
-        $percentComplete = [math]::Round((($i + 1) / $totalTasks) * 100)
-        Write-Progress -Activity "> System Information >>>>>>>>" `
-                       -Status "Processing: $taskName ($($i + 1) of $totalTasks)" `
-                       -PercentComplete $percentComplete
+        Write-Host "Starting task: $taskName " -ForegroundColor Cyan -NoNewline
 
         try {
             $executionTime = Measure-Command {
                 $result = & $task
                 $systemInfo | Add-Member -MemberType NoteProperty -Name $taskName -Value $result
             }
-            #Write-Host "`nTask '$taskName' completed in $($executionTime.TotalSeconds) seconds." -ForegroundColor Green
+            Write-Host "$($executionTime.TotalSeconds) seconds." -ForegroundColor Green
         } catch {
             Write-Host "`nTask '$taskName' encountered an error: $_" -ForegroundColor Red
             $systemInfo | Add-Member -MemberType NoteProperty -Name $taskName -Value "Error"
