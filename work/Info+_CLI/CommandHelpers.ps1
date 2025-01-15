@@ -160,24 +160,25 @@ function Start-ExecutableBackground {
     }
     # Start the runspace for each executable
     $runspace = [powershell]::Create()
-    $runspace.AddScript($scriptBlock).AddArgument($DisplayName).AddArgument($KeyboardFilePath)
+    # assigning runspace to $null removes the output of the runspace from the console 
+    $null = $runspace.AddScript($scriptBlock).AddArgument($DisplayName).AddArgument($KeyboardFilePath)
 
-    # Set up the asynchronous invocation
-    $asyncResult = $runspace.BeginInvoke() | Out-Null  # Suppress any output
+    # Set up the asynchronous invocation and suppress output
+    $asyncResult = $runspace.BeginInvoke() | Out-Null
 
     # Use a job to monitor and clean up the runspace
     Start-Job -ScriptBlock {
         param ($runspace, $asyncResult)
 
         try {
-            # Wait for the runspace to complete
-            $null = $runspace.EndInvoke($asyncResult)  # Suppress any return value
+            # Wait for the runspace to complete and suppress output
+            $null = $runspace.EndInvoke($asyncResult)
         } finally {
             # Clean up the runspace
             $runspace.Dispose()
             Write-Host "Cleaned up runspace for $($runspace.InstanceId)" -ForegroundColor Green
         }
-    } -ArgumentList $runspace, $asyncResult | Out-Null  # Suppress job output
+    } -ArgumentList $runspace, $asyncResult | Out-Null
    
 
 
@@ -313,7 +314,8 @@ function Start-ExecutableBackground {
     }
     # Start the runspace for each executable
     $runspace = [powershell]::Create()
-    $runspace.AddScript($scriptBlockBattery).AddArgument($BatteryDisplay).AddArgument($BatteryFilePath)
+    # assigning runspace to $null removes the output of the runspace from the console 
+    $null = $runspace.AddScript($scriptBlockBattery).AddArgument($BatteryDisplay).AddArgument($BatteryFilePath)
 
     # Set up the asynchronous invocation
     $asyncResult = $runspace.BeginInvoke() | Out-Null  # Suppress any output
