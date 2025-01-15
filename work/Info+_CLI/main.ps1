@@ -113,11 +113,15 @@ function Show-SystemInfo {
 
     # Disk Info as a Table
     if ($data.'Disk Info' -and $data.'Disk Info'.Count -gt 0) {
-        $data.'Disk Info' | Format-Table `
-            @{ Label = "Drive"; Expression = { $_.DriveLetter } }, `
-            @{ Label = "Disk Name"; Expression = { $_.DiskName } }, `
-            @{ Label = "Total Size (GB)"; Expression = { $_.TotalSizeGB } }, `
-            @{ Label = "Used Size (GB)"; Expression = { $_.UsedSizeGB } } -AutoSize
+        try {
+            $data.'Disk Info' | Format-Table `
+                @{ Label = "Letter"; Expression = { $_.DriveLetter } }, `
+                @{ Label = "Name"; Expression = { $_.DiskName } }, `
+                @{ Label = "Total (GB)"; Expression = { $_.TotalSizeGB -replace " GB", "" } }, `
+                @{ Label = "Used (GB)"; Expression = { $_.UsedSizeGB -replace " GB", "" } } -AutoSize
+        } catch {
+            Write-Host "An error occurred while displaying disk information: $_" -ForegroundColor Red
+        }
     } else {
         Write-Host "No Disk Information Available" -ForegroundColor Red
     }
@@ -142,8 +146,8 @@ function Show-SystemInfo {
     
     # Ensure Both Sections Have Equal Lines
     $maxLines = [math]::Max($ramInfoLines.Count, $slotDetailsLines.Count)
-    $ramInfoLines += ("|                            |" * ($maxLines - $ramInfoLines.Count))
-    $slotDetailsLines += ("|                                           |" * ($maxLines - $slotDetailsLines.Count))
+    $ramInfoLines += ("                              " * ($maxLines - $ramInfoLines.Count))
+    $slotDetailsLines += ("                                             " * ($maxLines - $slotDetailsLines.Count))
     
     # Combine and Output the Table
     for ($i = 0; $i -lt $maxLines; $i++) {
@@ -228,7 +232,7 @@ function Show-SystemInfo {
 
 Clear-Host
 Start-Files
-Get-CameraAndOpenApp
+Start-CameraAppInBackground
 Show-YouTubeIframe
 Show-SystemInfo
 # Main Menu
@@ -263,6 +267,7 @@ function Show-SystemInfoMenu {
     Write-Host "2. TWEAK - Display Not coming back when Suspended"
     Write-Host "3. Microsoft Activation Helper"
     Write-Host "4. Register OEM Key"
+    Write-Host "5. Disable/Unlock Bitlocker (Documents)"
     Write-Host "0. Back to Main Menu"
     Write-Host " "
 }
@@ -280,16 +285,15 @@ function SystemInfoOption {
         }
         "3" {
             Write-Host "`nStarting Activation Helper..." -ForegroundColor Green
-            if (Get-Command Start-ActivationScript -ErrorAction SilentlyContinue) {
-                Write-Host "Start-ActivationScript recognized."
-            } else {
-                Write-Host "Start-ActivationScript not recognized." -ForegroundColor Red
-            }
             Start-ActivationScript
         }
         "4" {
             Write-Host "`nRegistering OEM Key..." -ForegroundColor Green
             Register-OEMKey
+        }
+        "5" {
+            Write-Host "`nDisabling/Unlocking Bitlocker..." -ForegroundColor Green
+            Disable-BitLockerOnAllDrives
         }
         "0" {
             Clear-Host
@@ -308,7 +312,7 @@ function Show-SystemInfoSubmenu {
 
         do {
             $key = [System.Console]::ReadKey($true)
-        } while (-not ($key.KeyChar -match '^[0-4]$'))  # Only accept valid input
+        } while (-not ($key.KeyChar -match '^[0-5]$'))  # Only accept valid input
 
         SystemInfoOption $key
         if ($key.KeyChar -eq "0") { break }
