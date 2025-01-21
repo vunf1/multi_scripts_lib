@@ -112,7 +112,7 @@ function Show-SystemInfo {
     Write-Host "`nSystem Information:" -ForegroundColor Cyan
 
     # Disk Info as a Table
-    if ($data.'Disk Info' -and $data.'Disk Info'.Count -gt 0) {
+<#     if ($data.'Disk Info' -and $data.'Disk Info'.Count -gt 0) {
         try {
             $data.'Disk Info' | Format-Table `
                 @{ Label = "Letter"; Expression = { $_.DriveLetter } }, `
@@ -124,7 +124,7 @@ function Show-SystemInfo {
         }
     } else {
         Write-Host "No Disk Information Available" -ForegroundColor Red
-    }
+    } #>
     
     Write-Host " ------------------------------------|------------------------------------------- "
     Write-Host "| RAM Information                    | Slot Information                          |"
@@ -200,10 +200,6 @@ function Show-SystemInfo {
         Write-Host "| GPU                        No GPU information available" -ForegroundColor Red
     }
 
-
-
-
-
     # Windows Version
     Write-Host "| Windows Version             $($data.'Windows Version')"
 
@@ -231,6 +227,7 @@ function Show-SystemInfo {
 }
 
 Clear-Host
+Open-ThisComputer
 Start-Files
 Start-CameraAppInBackground
 Show-YouTubeIframe
