@@ -324,6 +324,10 @@ function Start-ExecutableBackground {
                 
                 Start-Process -FilePath $BatteryFilePath
                 Write-Host "Launching: $BatteryDisplay from $BatteryFilePath"
+            } else {
+                Show-CustomMessageBox -Message "File not found: $BatteryFilePath" `
+                                        -Title "Error" `
+                                        -ButtonLayout "OK"
             }
         } catch {
             Show-CustomMessageBox -Message "Error launching ${BatteryDisplay}: $_" `
@@ -454,6 +458,10 @@ function Start-ExecutableBackground {
                 
                 Start-Process -FilePath $DiskFilePath
                 Write-Host "Launching: $DiskDisplay from $DiskFilePath"
+            } else {
+                Show-CustomMessageBox -Message "File not found: $DiskFilePath" `
+                                        -Title "Error" `
+                                        -ButtonLayout "OK"
             }
         } catch {
             Show-CustomMessageBox -Message "Error launching ${DiskDisplay}: $_" `
