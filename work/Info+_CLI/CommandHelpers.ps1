@@ -1,22 +1,65 @@
-$global:executables = @{
+$global:executables = @{    
     "Keyboard" = "\\server\tools\#Keyboard Test.exe"
     "Battery"  = "\\server\tools\Tools\batteryinfoview\BatteryInfoView.exe"
+    "Disk"     = "\\server\tools\Tools\CrystalDisk\CrystalDiskInfo.exe"
 }
-function Start-ExecutableBackground {
+
+function Start-ScriptBlockInRunspace {
+    param (
+        [scriptblock]$ScriptBlock,
+        [array]$Arguments
+    )
+
+    try {
+        # Start the runspace
+        $runspace = [powershell]::Create()
+        $null = $runspace.AddScript($ScriptBlock)
+
+        # Add arguments dynamically
+        if ($Arguments) {
+            foreach ($arg in $Arguments) {
+                $null = $runspace.AddArgument($arg)
+            }
+        }
+
+        # Set up asynchronous invocation and suppress output
+        $asyncResult = $runspace.BeginInvoke() | Out-Null
+
+        # Use a job to monitor and clean up the runspace
+        Start-Job -ScriptBlock {
+            param ($runspace, $asyncResult)
+
+            try {
+                # Wait for the runspace to complete and suppress output
+                $null = $runspace.EndInvoke($asyncResult)
+            } finally {
+                # Clean up the runspace
+                $runspace.Dispose()
+                Write-Host "Cleaned up runspace for $($runspace.InstanceId)" -ForegroundColor Green
+            }
+        } -ArgumentList $runspace, $asyncResult | Out-Null
+        
+    } catch {
+        Write-Host "An error occurred while starting the script block: $_" -ForegroundColor Red
+    }
+}
+function Start-ExecutableBackground {    
     param (
         [Parameter(Mandatory = $true)]
         [hashtable]$Executables
     )
-    
+
     $KeyboardDisplay= "Keyboard" # Hardcoded - Value is not been saved $DisplayName or $FilePath when tryCatch need futher debugging
 
     $BatteryDisplay= "Battery" # Hardcoded - Value is not been saved $DisplayName or $FilePath when tryCatch need futher debugging
 
+    $DiskDisplay= "Disk" # Hardcoded - Value is not been saved $DisplayName or $FilePath when tryCatch need futher debugging
+
     $KeyboardFilePath = $Executables[$KeyboardDisplay]
     $BatteryFilePath = $Executables[$BatteryDisplay]
-
+    $DiskFilePath = $Executables[$DiskDisplay]
     # Run each executable in its own runspace
-    $scriptBlock = {
+    $scriptBlockKeyboard = {
         param ($KeyboardDisplay, $KeyboardFilePath)
 
         # Add the required .NET assemblies and the function within the runspace
@@ -135,7 +178,7 @@ function Start-ExecutableBackground {
         try {
             if (Test-Path $KeyboardFilePath) {
                 # Show confirmation message box
-                $response = Show-CustomMessageBox -Message "Do you want to launch Keyboard $KeyboardFilePath?" `
+                $response = Show-CustomMessageBox -Message "Do you want to launch Keyboard?" `
                                                     -Title "Confirmation" `
                                                     -ButtonLayout "YesNo"
 
@@ -153,37 +196,13 @@ function Start-ExecutableBackground {
                                         -ButtonLayout "OK"
             }
         } catch {
-            Show-CustomMessageBox -Message "Error launching ${DisplayName}: $_" `
+            Show-CustomMessageBox -Message "Error launching ${KeyboardDisplay}: $_" `
                                     -Title "Critical Error" `
                                     -ButtonLayout "OK"
         }
     }
-    # Start the runspace for each executable
-    $runspace = [powershell]::Create()
-    # assigning runspace to $null removes the output of the runspace from the console 
-    $null = $runspace.AddScript($scriptBlock).AddArgument($DisplayName).AddArgument($KeyboardFilePath)
 
-    # Set up the asynchronous invocation and suppress output
-    $asyncResult = $runspace.BeginInvoke() | Out-Null
-
-    # Use a job to monitor and clean up the runspace
-    Start-Job -ScriptBlock {
-        param ($runspace, $asyncResult)
-
-        try {
-            # Wait for the runspace to complete and suppress output
-            $null = $runspace.EndInvoke($asyncResult)
-        } finally {
-            # Clean up the runspace
-            $runspace.Dispose()
-            Write-Host "Cleaned up runspace for $($runspace.InstanceId)" -ForegroundColor Green
-        }
-    } -ArgumentList $runspace, $asyncResult | Out-Null
-   
-
-
-
-        $scriptBlockBattery = {
+    $scriptBlockBattery = {
         param ($BatteryDisplay, $BatteryFilePath)
 
         # Add the required .NET assemblies and the function within the runspace
@@ -312,27 +331,145 @@ function Start-ExecutableBackground {
                                     -ButtonLayout "OK"
         }
     }
-    # Start the runspace for each executable
-    $runspace = [powershell]::Create()
-    # assigning runspace to $null removes the output of the runspace from the console 
-    $null = $runspace.AddScript($scriptBlockBattery).AddArgument($BatteryDisplay).AddArgument($BatteryFilePath)
 
-    # Set up the asynchronous invocation
-    $asyncResult = $runspace.BeginInvoke() | Out-Null  # Suppress any output
+    $scriptBlockDisk = {
+        param ($DiskDisplay, $DiskFilePath)
 
-    # Use a job to monitor and clean up the runspace
-    Start-Job -ScriptBlock {
-        param ($runspace, $asyncResult)
+        # Add the required .NET assemblies and the function within the runspace
+        Add-Type -AssemblyName System.Windows.Forms
+        Add-Type -AssemblyName System.Drawing
+        # Function to show a custom message box, hardcoded in here because when creating new instance of new threads it does not have access to the external function, need debug to find a way  
+        function Show-CustomMessageBox {
+            param (
+                [string]$Message,
+                [string]$Title = "Notification",
+                [ValidateSet("Information", "Warning", "Error", "Critical")]
+                [string]$Type = "Information",
+                [ValidateSet("OK", "YesNo", "YesNoCancel", "RetryCancel", "AbortRetryIgnore")]
+                [string]$ButtonLayout = "YesNo",
+                [string]$CustomIconPath = "$PSScriptRoot\images\icons\icon2.ico" # Path to your default icon
+            )
+        
+            # Add required .NET assembly for Windows Forms
+            Add-Type -AssemblyName System.Windows.Forms
+            Add-Type -AssemblyName System.Drawing
+        
+            # Create the form
+            $form = New-Object System.Windows.Forms.Form
+            $form.Text = $Title
+            $form.StartPosition = "CenterScreen"
+            $form.Width = 270
+            $form.Height = 150
+            $form.FormBorderStyle = "FixedDialog"
+            $form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30) # Dark background
+            $form.MaximizeBox = $false
+            $form.MinimizeBox = $false
+            $form.ShowInTaskbar = $true
+            $form.Tag = $null # Use the Tag property to store the response
+        
+            # Set the custom icon
+            if (Test-Path $CustomIconPath) {
+                $form.Icon = New-Object System.Drawing.Icon($CustomIconPath)
+            } else {
+                Write-Host "Custom icon not found at $CustomIconPath. Using default icon." -ForegroundColor Yellow
+            }
+        
+            # Create the message label
+            $label = New-Object System.Windows.Forms.Label
+            $label.Text = $Message
+            $label.Font = New-Object System.Drawing.Font("Arial", 10, [System.Drawing.FontStyle]::Bold)
+            $label.ForeColor = [System.Drawing.Color]::White
+            $label.TextAlign = "MiddleCenter"
+            $label.Dock = "Top"
+            $label.Height = 50
+            $form.Controls.Add($label)
+        
+            # Create a FlowLayoutPanel to center buttons
+            $buttonPanel = New-Object System.Windows.Forms.FlowLayoutPanel
+            $buttonPanel.FlowDirection = "LeftToRight"
+            $buttonPanel.WrapContents = $false
+            $buttonPanel.Anchor = "Bottom"
+            $buttonPanel.Dock = "Bottom"
+            $buttonPanel.Padding = New-Object System.Windows.Forms.Padding(10)
+            $buttonPanel.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
+            $buttonPanel.AutoSize = $true
+            $buttonPanel.AutoSizeMode = "GrowAndShrink"
+            $form.Controls.Add($buttonPanel)
+        
+            # Helper function to create buttons
+            function CreateButton($text, $width, $height, $clickAction) {
+                $button = New-Object System.Windows.Forms.Button
+                $button.Text = $text
+                $button.Font = New-Object System.Drawing.Font("Arial", 9, [System.Drawing.FontStyle]::Regular)
+                $button.BackColor = [System.Drawing.Color]::White
+                $button.ForeColor = [System.Drawing.Color]::Black
+                $button.Width = $width
+                $button.Height = $height
+                $button.Margin = New-Object System.Windows.Forms.Padding(5) # Adds default spacing between buttons
+                $button.Add_Click($clickAction)
+                return $button
+            }
+        
+            # Add buttons based on the ButtonLayout parameter
+            switch ($ButtonLayout) {
+                "OK" {
+                    $okButton = CreateButton "OK" 80 30 { $form.Tag = "OK"; $form.Close() }
+                    $okButton.Margin = New-Object System.Windows.Forms.Padding(80, 0, 10, 0) 
+                    $buttonPanel.Controls.Add($okButton)
+                }
+                "YesNo" {
+                    $yesButton = CreateButton "Yes" 80 30 { $form.Tag = "Yes"; $form.Close() }
+                    $yesButton.Margin = New-Object System.Windows.Forms.Padding(10, 0, 50, 0) 
+                    $noButton = CreateButton "No" 80 30 { $form.Tag = "No"; $form.Close() }
+                    $noButton.Margin = New-Object System.Windows.Forms.Padding(10, 0, 50, 0) 
+                    $buttonPanel.Controls.Add($yesButton)
+                    $buttonPanel.Controls.Add($noButton)
+                }
+                "YesNoCancel" {
+                    $yesButton = CreateButton "Yes" 70 30 { $form.Tag = "Yes"; $form.Close() }
+                    $noButton = CreateButton "No" 70 30 { $form.Tag = "No"; $form.Close() }
+                    $cancelButton = CreateButton "Cancel" 70 30 { $form.Tag = "Cancel"; $form.Close() }
+                    $buttonPanel.Controls.Add($yesButton)
+                    $buttonPanel.Controls.Add($noButton)
+                    $buttonPanel.Controls.Add($cancelButton)
+                }
+            }
+        
+            # Center content dynamically on resize
+            $form.Add_SizeChanged({
+                $label.Width = $form.ClientSize.Width
+                $buttonPanel.Width = $form.ClientSize.Width
+                $buttonPanel.Left = ($form.ClientSize.Width - $buttonPanel.Width) / 2
+            })
+        
+            # Show the form and return the user's response
+            $form.ShowDialog() | Out-Null
+            return $form.Tag
+        }
+
 
         try {
-            # Wait for the runspace to complete
-            $null = $runspace.EndInvoke($asyncResult)  # Suppress any return value
-        } finally {
-            # Clean up the runspace
-            $runspace.Dispose()
-            Write-Host "Cleaned up runspace for $($runspace.InstanceId)" -ForegroundColor Green
+            if (Test-Path $DiskFilePath) {
+                # Show confirmation message box
+                
+                Start-Process -FilePath $DiskFilePath
+                Write-Host "Launching: $DiskDisplay from $DiskFilePath"
+            }
+        } catch {
+            Show-CustomMessageBox -Message "Error launching ${DiskDisplay}: $_" `
+                                    -Title "Critical Error" `
+                                    -ButtonLayout "OK"
         }
-    } -ArgumentList $runspace, $asyncResult | Out-Null  # Suppress job output
+    }
+
+    # Start the keyboard script block
+    Start-ScriptBlockInRunspace -ScriptBlock $scriptBlockKeyboard -Arguments @($KeyboardDisplay, $KeyboardFilePath)
+
+    # Start the battery script block
+    Start-ScriptBlockInRunspace -ScriptBlock $scriptBlockBattery -Arguments @($BatteryDisplay, $BatteryFilePath)
+
+    # Start the disk script block
+    Start-ScriptBlockInRunspace -ScriptBlock $scriptBlockDisk -Arguments @($DiskDisplay, $DiskFilePath)
 }
 function Start-Files {
     Start-ExecutableBackground -Executables $global:executables
