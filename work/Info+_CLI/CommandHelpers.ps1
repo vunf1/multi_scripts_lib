@@ -15,7 +15,7 @@ function Start-ScriptBlockInRunspace {
         $runspace = [powershell]::Create()
         $null = $runspace.AddScript($ScriptBlock)
 
-        # Add arguments dynamically
+        # Add arguments dynamically (optional)
         if ($Arguments) {
             foreach ($arg in $Arguments) {
                 $null = $runspace.AddArgument($arg)

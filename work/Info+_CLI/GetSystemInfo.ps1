@@ -163,8 +163,8 @@ function Get-TotalSticksRam {
 
 function Get-ProcessorInfo {
     try {
-        # Fetch processor details using Get-WmiObject
-        $processors = Get-WmiObject -Class Win32_Processor | ForEach-Object {
+        # Fetch processor details using Get-CimInstance
+        $processors = Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop | ForEach-Object {
             [PSCustomObject]@{
                 Name              = $_.Name.Trim()
                 MaxClockSpeed     = "$($_.MaxClockSpeed) MHz"
@@ -175,10 +175,11 @@ function Get-ProcessorInfo {
         }
 
         # Determine the color based on the processor brand
-        $cpuColor = if ($processors.Name -match "AMD") { "Red" } `
-                    elseif ($processors.Name -match "Intel") { "Cyan" } `
+        $cpuColor = if ($processors -and $processors.Name -match "AMD") { "Red" } `
+                    elseif ($processors -and $processors.Name -match "Intel") { "Cyan" } `
                     else { "Blue" }
 
+        # Return processor info and color
         return [PSCustomObject]@{
             Info  = $processors
             Color = if ([Enum]::IsDefined([System.ConsoleColor], $cpuColor)) { $cpuColor } else { "Gray" }
@@ -192,23 +193,29 @@ function Get-ProcessorInfo {
     }
 }
 
+
 function Get-GPUInfo {
     try {
-
+        # Primary check using Get-CimInstance
         $gpus = Get-CimInstance -ClassName Win32_VideoController -ErrorAction SilentlyContinue | ForEach-Object {
-
-            $isDedicated = if ($_.AdapterRAM -and $_.AdapterRAM -gt 0) { 
+            # Determine if the GPU is dedicated or integrated
+            $isDedicated = if ($_.VideoArchitecture -eq 5) { 
                 "Dedicated" 
-            } elseif ($_.AdapterCompatibility -match "Intel|AMD") {
-                if ($_.Description -match "UHD|Integrated|APU") { 
-                    "Integrated" 
-                } else { 
-                    "Unknown" 
+            } elseif ($_.VideoArchitecture -eq 2) { 
+                "Integrated" 
+            } elseif ($_.AdapterRAM -and $_.AdapterRAM -gt 2GB -and $_.AdapterCompatibility -match "NVIDIA|AMD") {
+                "Dedicated" 
+            } elseif ($_.AdapterCompatibility -match "Intel" -or $_.AdapterDACType -match "AMD") {
+                if ($_.Description -match "UHD|Integrated|APU") {
+                    "Integrated"
+                } else {
+                    "Unknown"
                 }
             } else { 
                 "Unknown" 
             }
             
+            # Assign colors based on GPU type
             $gpuColor = if ($_.Caption -match "NVIDIA") { 
                 "Green" 
             } elseif ($_.Caption -match "AMD") { 
@@ -226,7 +233,7 @@ function Get-GPUInfo {
             }
         }
 
-        # Explicitly ensure $gpus is treated as an array
+        # Ensure $gpus is an array
         $gpus = @($gpus)
 
         if ($gpus.Count -gt 0) {
@@ -234,17 +241,42 @@ function Get-GPUInfo {
                 GPUs = $gpus
             }
         } else {
-            Write-Host "No GPUs detected on this system."
-            return [PSCustomObject]@{
-                GPUs = @([PSCustomObject]@{ Name = "No GPU Found"; Dedicated = "N/A"; Color = "Gray" })
+            # Fallback to WMIC
+            $wmicOutput = (wmic path Win32_VideoController get Caption,AdapterRAM /format:list) -split "`r?`n"
+            $wmicGpus = $wmicOutput | Where-Object { $_ -match "Caption|AdapterRAM" } | ForEach-Object {
+                if ($_ -match "Caption") {
+                    $name = ($_ -split "=")[1].Trim()
+                } elseif ($_ -match "AdapterRAM") {
+                    $adapterRam = ($_ -split "=")[1].Trim()
+                    $isDedicated = if ([int]$adapterRam -gt 2GB) { "Dedicated" } else { "Integrated" }
+                }
+                if ($name) {
+                    [PSCustomObject]@{
+                        Name       = $name
+                        Dedicated  = $isDedicated
+                        Color      = if ($name -match "NVIDIA") { "Green" } elseif ($name -match "AMD") { "Red" } else { "Cyan" }
+                    }
+                }
+            }
+            if ($wmicGpus) {
+                return [PSCustomObject]@{
+                    GPUs = @($wmicGpus)
+                }
+            } else {
+                Write-Host "No GPUs detected on this system."
+                return [PSCustomObject]@{
+                    GPUs = @([PSCustomObject]@{ Name = "No GPU Found"; Dedicated = "N/A"; Color = "Gray" })
+                }
             }
         }
     } catch {
+        Write-Host "An error occurred while retrieving GPU information: $_" -ForegroundColor Red
         return [PSCustomObject]@{
             GPUs = @([PSCustomObject]@{ Name = "Error Retrieving GPU Info"; Dedicated = "N/A"; Color = "Red" })
         }
     }
 }
+
 
 function Get-WindowsVersion {
     return (Get-CimInstance -ClassName Win32_OperatingSystem).Caption
@@ -284,23 +316,67 @@ function Get-ActivationDetails {
 
 function Show-WindowsProductKeys {
     try {
-        # Use slmgr.vbs to retrieve the partial product key, can't get the full key need more debugging
-        $slmgrOutput = cscript.exe $env:SystemRoot\System32\slmgr.vbs /dlv 2>&1 | Out-String
-        $partialKeyPattern = "Partial Product Key:\s*([A-Z0-9]{5})"
-
-        # Parse the partial product key
-        $installedKey = if ($slmgrOutput -match $partialKeyPattern) {
-            "XXXXX-XXXXX-XXXXX-XXXXX-$($matches[1])"
-        } else {
-            "Not Found"
+        # Function to decode the product key
+        function Convert-Key {
+            param ([byte[]]$DigitalProductId)
+            $keyChars = "BCDFGHJKMPQRTVWXY2346789"
+            $decodedKey = ""
+            $key = [System.Collections.Generic.List[byte]]::new()
+        
+            # Initialize the key array from DigitalProductId
+            for ($i = 52; $i -ge 52 - 15; $i--) { $key.Add($DigitalProductId[$i]) }
+        
+            # Decode the key
+            for ($i = 0; $i -lt 25; $i++) {
+                $current = 0
+                for ($j = 14; $j -ge 0; $j--) {
+                    $current = ($current * 256) + $key[$j]
+                    $key[$j] = [math]::Floor($current / 24)
+                    $current = $current % 24
+                }
+                $decodedKey = $keyChars[$current] + $decodedKey
+            }
+        
+            if ($decodedKey.Length -ne 25) {
+                throw "Decoded product key length is invalid: $($decodedKey.Length)"
+            }
+        
+            # Insert dashes for readability (split into groups of 5 characters)
+            return ($decodedKey -replace ".{5}", '$&-').TrimEnd('-')
         }
 
-        $oemKey = Get-OEMKey
+        # Retrieve the installed product key
+        $digitalProductId = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -ErrorAction SilentlyContinue).DigitalProductId
+        $installedKey = if ($digitalProductId) { Convert-Key -DigitalProductId $digitalProductId } else { "Not Found" }
+        # Fallback to WMI query only if necessary
+        if ($installedKey -eq "Not Found") {
+            try {
+                $license = Get-CimInstance -Query "SELECT * FROM SoftwareLicensingProduct WHERE PartialProductKey IS NOT NULL AND LicenseStatus=1" -ErrorAction Stop
+                if ($license -and $license.DigitalProductId) {
+                    $installedKey = Convert-Key -DigitalProductId $license.DigitalProductId
+                }
+            } catch {
+                $installedKey = "Not Found"
+            }   
+        }
+        # Check if the installed key matches a generic key
+        if ($WindowsGenericKeys) {
+            $matchedKey = $WindowsGenericKeys | Where-Object { $_.Key -eq $installedKey }
+            if ($matchedKey) {
+                $installedKey += " (Generic key: $($matchedKey.Edition))"
+            }
+        }
 
+        # Retrieve the OEM key
+        $oemKey = Get-OEMKey
         # Assign colors for display
         $installedKeyColor = if ($installedKey -ne "Not Found") { "Yellow" } else { "Red" }
         $oemKeyColor = if ($oemKey -eq "Not Found") { "Yellow" } elseif ($oemKey -eq "Error") { "Red" } else { "Green" }
 
+        # Validate colors
+        $installedKeyColor = if ([Enum]::IsDefined([System.ConsoleColor], $installedKeyColor)) { $installedKeyColor } else { "Red" }
+        $oemKeyColor = if ([Enum]::IsDefined([System.ConsoleColor], $oemKeyColor)) { $oemKeyColor } else { "Red" }
+        # Return results as a PSCustomObject
         return [PSCustomObject]@{
             InstalledKey      = $installedKey
             InstalledKeyColor = $installedKeyColor
@@ -378,7 +454,6 @@ function Get-OEMKey{
 
 function Start-CameraAppInBackground {
     try {
-        # Define the script content as a script block
         $scriptContent = {
             try {
                 function Get-CameraAndOpenApp {
@@ -495,48 +570,85 @@ function Start-CameraAppInBackground {
             } catch {
                 return "ErrorScript"
             }
-        }
+        }     
 
-        $job = Start-Job -ScriptBlock $scriptContent
-        $jobResult = $null
-        do {
-            Start-Sleep -Milliseconds 500 # Wait for the job to complete
-            $jobResult = Receive-Job -Job $job -ErrorAction SilentlyContinue
-        } while (-not $jobResult -and $job.State -eq 'Running')
-
-        switch ($jobResult) {
-            "Success" {
-                Write-Host "Camera app started successfully." -ForegroundColor Green
-            }
-            "NoCamera" {
-                Write-Host "No camera detected on this machine." -ForegroundColor Yellow
-            }
-            "Failed" {
-                Write-Host "Failed to open the Camera app." -ForegroundColor Red
-            }
-            "Error" {
-                Write-Host "An error occurred while checking for camera or opening the app." -ForegroundColor Red
-            }
-            "ErrorScript" {
-                Write-Host "An error occurred while openning script block." -ForegroundColor Red
-            }
-            default {
-                Write-Host "Camera check encountered an unknown issue." -ForegroundColor Yellow
-            }
-        }
-
-        # Clean up the job
-        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+        Write-Host "Camera app process handled in the background " -ForegroundColor Yellow
+        Start-ScriptBlockInRunspace -ScriptBlock $scriptContent
     } catch {
         Write-Host "An error occurred while starting the Camera: $_" -ForegroundColor Red
     }
 }
+
+function Get-BitLockerStatus {
+    try {
+        # Retrieve BitLocker status for all drives
+        $bitLockerDrives = Get-BitLockerVolume -ErrorAction SilentlyContinue
+
+        if (-not $bitLockerDrives) {
+            Write-Host "No drives found with BitLocker information." -ForegroundColor Yellow
+            return @([PSCustomObject]@{
+                DriveLetter           = "N/A"
+                ProtectionStatus      = "No Drives Found"
+                EncryptionPercentage  = "N/A"
+                LockStatus            = "N/A"
+            })
+        }
+
+        # Create an array to store results
+        $bitLockerStatus = @()
+
+        # Parse and prepare the BitLocker information
+        $bitLockerDrives | ForEach-Object {
+            $driveLetter = $_.MountPoint
+            $protectionStatus = switch ($_.ProtectionStatus) {
+                0 { "Off" }
+                1 { "On" }
+                2 { "Suspended" }
+                default { "Unknown" }
+            }
+            $encryptionPercentage = if ($_.VolumeStatus -eq "FullyEncrypted") {
+                "100%"
+            } elseif ($_.VolumeStatus -eq "Encrypting" -or $_.VolumeStatus -eq "Decrypting") {
+                "$($_.EncryptionPercentage)%"
+            } else {
+                "0%"
+            }
+            $lockStatus = switch ($_.LockStatus) {
+                0 { "Unlocked" }
+                1 { "Locked" }
+                default { "Unknown" }
+            }
+
+            # Add to the result array
+            $bitLockerStatus += [PSCustomObject]@{
+                DriveLetter           = $driveLetter
+                ProtectionStatus      = $protectionStatus
+                EncryptionPercentage  = $encryptionPercentage
+                LockStatus            = $lockStatus
+            }
+        }
+
+        # Return the result array
+        return $bitLockerStatus
+
+    } catch {
+        Write-Error "An error occurred while retrieving BitLocker status: $_"
+        return @([PSCustomObject]@{
+            DriveLetter           = "Error"
+            ProtectionStatus      = "Error"
+            EncryptionPercentage  = "Error"
+            LockStatus            = "Error"
+        })
+    }
+}
+
 
 function Get-SystemInfo {
     Write-Host " `nRefreshing System Information..." -ForegroundColor Yellow
 
     # Define tasks dynamically with a script block
     $tasks = @(
+        #@{ Name = "BitLocker Info"; Task = { Get-BitLockerStatus } },
         @{ Name = "Memory Info"; Task = { Get-TotalSticksRam } },
         @{ Name = "Processor Info"; Task = { Get-ProcessorInfo } },
         @{ Name = "GPU Info"; Task = { Get-GPUInfo } },

@@ -9,6 +9,9 @@ function Clear-SystemCache {
         Write-Host "Clearing Temp Folder..." -ForegroundColor Orange
         Remove-Item "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
 
+        Write-Host "Cleaning up Windows Component Store..." -ForegroundColor Orange
+        Start-Process -FilePath "dism.exe" -ArgumentList "/Online /Cleanup-Image /StartComponentCleanup" -Wait
+        
         # Clear Windows Update Cache
         Write-Host "Stopping Windows Update Service..." -ForegroundColor Red
         Stop-Service -Name wuauserv -Force
@@ -16,6 +19,12 @@ function Clear-SystemCache {
         Remove-Item "C:\Windows\SoftwareDistribution\*" -Recurse -Force
         Start-Service -Name wuauserv
         Write-Host "Restarting Windows Update Service..." -ForegroundColor Green
+
+        # Clear browser caches (Chrome, Firefox, Edge)
+        Write-Host "Cleaning browser caches..." -ForegroundColor Orange
+        Remove-Item "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Cache\*" -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item "$env:LOCALAPPDATA\Mozilla\Firefox\Profiles\*\cache2\*" -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Cache\*" -Recurse -Force -ErrorAction SilentlyContinue
 
         # Clear Internet Explorer/Edge Cache
         Write-Host "Clearing Internet Explorer/Edge Cache..." -ForegroundColor Orange
@@ -36,6 +45,11 @@ function Clear-SystemCache {
         # Clear Delivery Optimization Files
         Write-Host "Running Disk Cleanup..." -ForegroundColor Orange
         Start-Process "cleanmgr.exe" -ArgumentList "/sagerun:1" -Wait
+
+        # Remove old Windows versions
+        Write-Host "Removing old Windows versions..." -ForegroundColor Orange
+        Start-Process -FilePath "cleanmgr.exe" -ArgumentList "/sageset:1" -Wait
+        Start-Process -FilePath "cleanmgr.exe" -ArgumentList "/sagerun:1" -Wait
 
         # Clear Windows Temp Files
         Write-Host "Clearing Windows Temp Folder..." -ForegroundColor Orange
@@ -153,15 +167,23 @@ function Register-OEMKey {
 }
 function Start-ActivationScript {
     try {
+        # Fetch the script content from the remote source
         $scriptContent = Invoke-RestMethod -Uri "https://get.activated.win"
 
+        if (-not $scriptContent) {
+            Write-Host "Failed to fetch the Activation Script content." -ForegroundColor Red
+            return
+        }
+
+        # Create the script block from the fetched content
         $scriptBlock = [ScriptBlock]::Create($scriptContent)
 
-        Write-Host "Starting Windows/Office Activation." -ForegroundColor Green
-        Start-Job -ScriptBlock $scriptBlock | Out-Null
+        Write-Host "Starting Windows/Office Activation in a runspace." -ForegroundColor Green
 
-        Write-Host "Activation Windows/Office successfully open." -ForegroundColor Green
-        return
+        # Use the Start-ScriptBlockInRunspace function to execute the script block
+        Start-ScriptBlockInRunspace -ScriptBlock $scriptBlock -Arguments $null
+
+        Write-Host "Activation script has been started successfully." -ForegroundColor Green
     } catch {
         Write-Host "An error occurred while fetching or executing the Activation Script: $_" -ForegroundColor Red
     }

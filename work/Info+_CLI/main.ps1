@@ -227,7 +227,7 @@ function Show-SystemInfo {
 }
 
 Clear-Host
-Open-ThisComputer
+
 Start-Files
 Start-CameraAppInBackground
 Show-YouTubeIframe
@@ -422,7 +422,7 @@ function Show-MaintenanceSubmenu {
 }
 
 # Main Loop
-$global:exitProgram = $false
+$global:exitProgram = $false # Global flag to exit the program - set to true to exit - make sure program exit correctly
 while (-not $global:exitProgram) {
     Show-MainMenu
     # Flush input buffer by reading all available characters
