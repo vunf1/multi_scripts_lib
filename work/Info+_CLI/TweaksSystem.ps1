@@ -3,65 +3,65 @@ function Clear-SystemCache {
     $confirmation = Show-CustomMessageBox -Message "Are you sure you want to clean the system cache?" -Title "Confirmation" -ButtonLayout "YesNo"
 
     if ($confirmation -eq "Yes") {
-        Write-Host "`nCleaning System Cache..." -ForegroundColor Yellow
+        Write-Host "`nCleaning System Cache..."
 
         # Clear Temp Files
-        Write-Host "Clearing Temp Folder..." -ForegroundColor Orange
+        Write-Host "Clearing Temp Folder..."
         Remove-Item "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
 
-        Write-Host "Cleaning up Windows Component Store..." -ForegroundColor Orange
+        Write-Host "Cleaning up Windows Component Store..."
         Start-Process -FilePath "dism.exe" -ArgumentList "/Online /Cleanup-Image /StartComponentCleanup" -Wait
         
         # Clear Windows Update Cache
-        Write-Host "Stopping Windows Update Service..." -ForegroundColor Red
+        Write-Host "Stopping Windows Update Service..."
         Stop-Service -Name wuauserv -Force
-        Write-Host "Clearing Windows Update Cache..." -ForegroundColor Orange
+        Write-Host "Clearing Windows Update Cache..."
         Remove-Item "C:\Windows\SoftwareDistribution\*" -Recurse -Force
         Start-Service -Name wuauserv
-        Write-Host "Restarting Windows Update Service..." -ForegroundColor Green
+        Write-Host "Restarting Windows Update Service..."
 
         # Clear browser caches (Chrome, Firefox, Edge)
-        Write-Host "Cleaning browser caches..." -ForegroundColor Orange
+        Write-Host "Cleaning browser caches..."
         Remove-Item "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Cache\*" -Recurse -Force -ErrorAction SilentlyContinue
         Remove-Item "$env:LOCALAPPDATA\Mozilla\Firefox\Profiles\*\cache2\*" -Recurse -Force -ErrorAction SilentlyContinue
         Remove-Item "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Cache\*" -Recurse -Force -ErrorAction SilentlyContinue
 
         # Clear Internet Explorer/Edge Cache
-        Write-Host "Clearing Internet Explorer/Edge Cache..." -ForegroundColor Orange
+        Write-Host "Clearing Internet Explorer/Edge Cache..."
         RunDll32.exe InetCpl.cpl,ClearMyTracksByProcess 255
 
         # Clear DNS Cache
-        Write-Host "Clearing DNS Cache..." -ForegroundColor Orange
+        Write-Host "Clearing DNS Cache..."
         Clear-DnsClientCache
 
         # Clear System Event Logs
-        Write-Host "Clearing System Event Logs..." -ForegroundColor Orange
+        Write-Host "Clearing System Event Logs..."
         wevtutil el | ForEach-Object { wevtutil cl $_ }
 
         # Clean Recycle Bin
-        Write-Host "Emptying Recycle Bin..." -ForegroundColor Orange
+        Write-Host "Emptying Recycle Bin..."
         Clear-RecycleBin -Force
 
         # Clear Delivery Optimization Files
-        Write-Host "Running Disk Cleanup..." -ForegroundColor Orange
+        Write-Host "Running Disk Cleanup..."
         Start-Process "cleanmgr.exe" -ArgumentList "/sagerun:1" -Wait
 
         # Remove old Windows versions
-        Write-Host "Removing old Windows versions..." -ForegroundColor Orange
+        Write-Host "Removing old Windows versions..."
         Start-Process -FilePath "cleanmgr.exe" -ArgumentList "/sageset:1" -Wait
         Start-Process -FilePath "cleanmgr.exe" -ArgumentList "/sagerun:1" -Wait
 
         # Clear Windows Temp Files
-        Write-Host "Clearing Windows Temp Folder..." -ForegroundColor Orange
+        Write-Host "Clearing Windows Temp Folder..."
         Remove-Item "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
 
         # Clean Default Downloads Folder
-        Write-Host "Clearing Downloads Folder..." -ForegroundColor Orange
+        Write-Host "Clearing Downloads Folder..."
         Remove-Item "$env:USERPROFILE\Downloads\*" -Recurse -Force -ErrorAction SilentlyContinue
 
-        Write-Host "`nSystem Cache Cleaned Successfully!" -ForegroundColor Green
+        Write-Host "`nSystem Cache Cleaned Successfully!"
     } else {
-        Write-Host "Operation cancelled by user." -ForegroundColor Red
+        Write-Host "Operation cancelled by user."
     }
 }
 
@@ -167,27 +167,42 @@ function Register-OEMKey {
 }
 function Start-ActivationScript {
     try {
-        # Fetch the script content from the remote source
-        $scriptContent = Invoke-RestMethod -Uri "https://get.activated.win"
+        
+        $activationScriptUri = "https://get.activated.win"
+        $tempScriptPath = "$env:TEMP\ActivationScript.ps1"
 
-        if (-not $scriptContent) {
-            Write-Host "Failed to fetch the Activation Script content." -ForegroundColor Red
+        Write-Host "Fetching the Activation Script..." -ForegroundColor Yellow
+        Invoke-RestMethod -Uri $activationScriptUri -OutFile $tempScriptPath
+
+        if (-not (Test-Path $tempScriptPath)) {
+            Write-Host "Failed to fetch or save the Activation Script." -ForegroundColor Red
             return
         }
 
-        # Create the script block from the fetched content
-        $scriptBlock = [ScriptBlock]::Create($scriptContent)
+        Write-Host "Activation Script saved to: $tempScriptPath" -ForegroundColor Green
 
-        Write-Host "Starting Windows/Office Activation in a runspace." -ForegroundColor Green
+        # Execute the script asynchronously using a runspace
+        $scriptBlock = {
+            param ($scriptPath)
+            try {
+                # Execute the script from the file
+                Write-Host "Executing Activation Script..." -ForegroundColor Yellow
+                & $scriptPath
 
-        # Use the Start-ScriptBlockInRunspace function to execute the script block
-        Start-ScriptBlockInRunspace -ScriptBlock $scriptBlock -Arguments $null
+                # Clean up the temporary file
+                Remove-Item -Path $scriptPath -Force -ErrorAction SilentlyContinue
+                Write-Host "Activation Script executed and temporary file removed." -ForegroundColor Green
+            } catch {
+                Write-Host "An error occurred during Activation Script execution: $_" -ForegroundColor Red
+            }
+        }
 
-        Write-Host "Activation script has been started successfully." -ForegroundColor Green
+        # Start the runspace for asynchronous execution
+        Start-Job -ScriptBlock $scriptBlock -ArgumentList $tempScriptPath | Out-Null
+
+        Write-Host "Activation script has been started in the background successfully." -ForegroundColor Green
     } catch {
-        Write-Host "An error occurred while fetching or executing the Activation Script: $_" -ForegroundColor Red
+        Write-Host "An error occurred while fetching or starting the Activation Script: $_" -ForegroundColor Red
     }
 }
-
-
 
