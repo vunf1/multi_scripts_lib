@@ -376,20 +376,28 @@ function Show-WindowsProductKeys {
         # Validate colors
         $installedKeyColor = if ([Enum]::IsDefined([System.ConsoleColor], $installedKeyColor)) { $installedKeyColor } else { "Red" }
         $oemKeyColor = if ([Enum]::IsDefined([System.ConsoleColor], $oemKeyColor)) { $oemKeyColor } else { "Red" }
-        # Return results as a PSCustomObject
+        
         return [PSCustomObject]@{
-            InstalledKey      = $installedKey
-            InstalledKeyColor = $installedKeyColor
-            OEMKey            = $oemKey
-            OEMKeyColor       = $oemKeyColor
+            InstalledKey = @{
+                Value = $installedKey
+                Color = $0installedKeyColor
+            }
+            OEMKey = @{
+                Value = $oemKey
+                Color = $oemKeyColor
+            }
         }
     } catch {
         Write-Error "An error occurred: $_"
         return [PSCustomObject]@{
-            InstalledKey      = "Error"
-            InstalledKeyColor = "Red"
-            OEMKey            = "Error"
-            OEMKeyColor       = "Red"
+            InstalledKey = @{
+                Value =  "Error"
+                Color = "Red"
+            }
+            OEMKey = @{
+                Value =  "Error"
+                Color = "Red"
+            }
         }
     }
 }

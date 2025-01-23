@@ -79,7 +79,7 @@ function Start-MemoryDiagnosticWithTask {
     }
 }
 
-
+ 
 function Show-SystemInfo {    
     param (
         [string]$Command = "default" 
@@ -212,17 +212,30 @@ function Show-SystemInfo {
 
     # Product Keys
     $productKeys = $data.'System Product Keys'
-    $installedKeyColor = if ($productKeys.InstalledKeyColor -and [Enum]::IsDefined([System.ConsoleColor], $productKeys.InstalledKeyColor)) { 
-        $productKeys.InstalledKeyColor 
-    } else { "Gray" }
-    Write-Host "| Installed Product Key      " -NoNewline
-    Write-Host " $($productKeys.InstalledKey)" -ForegroundColor $installedKeyColor
 
-    $oemKeyColor = if ($productKeys.OEMKeyColor -and [Enum]::IsDefined([System.ConsoleColor], $productKeys.OEMKeyColor)) { 
-        $productKeys.OEMKeyColor 
-    } else { "Gray" }
-    Write-Host "| OEM Product Key            " -NoNewline
-    Write-Host " $($productKeys.OEMKey)" -ForegroundColor $oemKeyColor
+    # Installed Product Key
+    if ($productKeys.InstalledKey -and $productKeys.InstalledKey.Value) {
+        $installedKeyColor = if ($productKeys.InstalledKey.Color -and [Enum]::IsDefined([System.ConsoleColor], $productKeys.InstalledKey.Color)) { 
+            $productKeys.InstalledKey.Color 
+        } else { "Gray" }
+
+        Write-Host "| Installed Product Key      " -NoNewline
+        Write-Host " $($productKeys.InstalledKey.Value)" -ForegroundColor $installedKeyColor
+    } else {
+        Write-Host "| Installed Product Key      Not Found" -ForegroundColor Red
+    }
+
+    # OEM Product Key
+    if ($productKeys.OEMKey -and $productKeys.OEMKey.Value) {
+        $oemKeyColor = if ($productKeys.OEMKey.Color -and [Enum]::IsDefined([System.ConsoleColor], $productKeys.OEMKey.Color)) { 
+            $productKeys.OEMKey.Color 
+        } else { "Gray" }
+
+        Write-Host "| OEM Product Key            " -NoNewline
+        Write-Host " $($productKeys.OEMKey.Value)" -ForegroundColor $oemKeyColor
+    } else {
+        Write-Host "| OEM Product Key            Not Found" -ForegroundColor Red
+    }
 
 }
 
@@ -236,7 +249,7 @@ Show-SystemInfo
 function Show-MainMenu {
     Write-Host "`nMain Menu - Choose an option (0 to EXIT):" -ForegroundColor Yellow
     Write-Host "1. System Information & Tweaks"
-    Write-Host "2. Drivers and Tools"
+    Write-Host "2. Drivers and Tests"
     Write-Host "3. System Maintenance"
     Write-Host "0. Exit"
     Write-Host " "
