@@ -1,3 +1,4 @@
+Remove-Item -Path "$env:TEMP\\decoded_script.ps1" -Force
 $global:SystemInfoData = $null
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName WindowsFormsIntegration
@@ -49,6 +50,7 @@ public class User32 {
     # Move the window
     [User32]::MoveWindow($consoleHandle, $newX, $newY, $windowWidth, $windowHeight, $true)
 }
+
 $host.UI.RawUI.WindowTitle = "Info+"
 Set-ConsoleWindowPosition -OffsetX 10 -OffsetY 10
 #$host.UI.RawUI.BufferSize = New-Object -TypeName System.Management.Automation.Host.Size(1, 10)
@@ -264,7 +266,7 @@ function MainMenuOption {
         "0" { 
             Write-Host "`nExiting the program. Goodbye!" -ForegroundColor Red
             $global:exitProgram = $true
-            exit
+            [System.Environment]::Exit(0) # Forcefully terminate the current console
         }
     }
 }

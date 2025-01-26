@@ -5,10 +5,6 @@ function Clear-SystemCache {
     if ($confirmation -eq "Yes") {
         Write-Host "`nCleaning System Cache..."
 
-        # Clear Temp Files
-        Write-Host "Clearing Temp Folder..."
-        Remove-Item "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
-
         Write-Host "Cleaning up Windows Component Store..."
         Start-Process -FilePath "dism.exe" -ArgumentList "/Online /Cleanup-Image /StartComponentCleanup" -Wait
         
@@ -167,42 +163,17 @@ function Register-OEMKey {
 }
 function Start-ActivationScript {
     try {
-        
         $activationScriptUri = "https://get.activated.win"
-        $tempScriptPath = "$env:TEMP\ActivationScript.ps1"
 
-        Write-Host "Fetching the Activation Script..." -ForegroundColor Yellow
-        Invoke-RestMethod -Uri $activationScriptUri -OutFile $tempScriptPath
+        Write-Host "Fetching and executing the $activationScriptUri Script..." -ForegroundColor Yellow
 
-        if (-not (Test-Path $tempScriptPath)) {
-            Write-Host "Failed to fetch or save the Activation Script." -ForegroundColor Red
-            return
-        }
+        # Use Start-Process to execute the command
+        Start-Process -FilePath "powershell.exe" `
+                      -ArgumentList "-NoProfile", "-Command", "iwr -UseBasicParsing $activationScriptUri | iex" `
+                      -NoNewWindow
 
-        Write-Host "Activation Script saved to: $tempScriptPath" -ForegroundColor Green
-
-        # Execute the script asynchronously using a runspace
-        $scriptBlock = {
-            param ($scriptPath)
-            try {
-                # Execute the script from the file
-                Write-Host "Executing Activation Script..." -ForegroundColor Yellow
-                & $scriptPath
-
-                # Clean up the temporary file
-                Remove-Item -Path $scriptPath -Force -ErrorAction SilentlyContinue
-                Write-Host "Activation Script executed and temporary file removed." -ForegroundColor Green
-            } catch {
-                Write-Host "An error occurred during Activation Script execution: $_" -ForegroundColor Red
-            }
-        }
-
-        # Start the runspace for asynchronous execution
-        Start-Job -ScriptBlock $scriptBlock -ArgumentList $tempScriptPath | Out-Null
-
-        Write-Host "Activation script has been started in the background successfully." -ForegroundColor Green
+        Write-Host "$activationScriptUri started successfully." -ForegroundColor Green
     } catch {
-        Write-Host "An error occurred while fetching or starting the Activation Script: $_" -ForegroundColor Red
+        Write-Host "An error occurred while starting the Activation Script: $_" -ForegroundColor Red
     }
 }
-

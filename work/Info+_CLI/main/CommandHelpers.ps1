@@ -1,48 +1,39 @@
-$global:executables = @{    
+<# $global:executables = @{    
     "Keyboard" = "\\server\tools\#Keyboard Test.exe"
     "Battery"  = "\\server\tools\Tools\batteryinfoview\BatteryInfoView.exe"
     "Disk"     = "\\server\tools\Tools\CrystalDisk\CrystalDiskInfo.exe"
+} #>
+$global:executables = @{    
+    "Keyboard" = "C:\Users\Utilizador\Documents\NordLocker"
+    "Battery"  = "C:\Users\Utilizador\Downloads\Adobe-GenP-3.4.2-CGP"
+    "Disk"     = "C:\Users\Utilizador\Downloads\RAID_SATA"
 }
-
 function Start-ScriptBlockInRunspace {
     param (
         [scriptblock]$ScriptBlock,
-        [array]$Arguments
+        [array]$Arguments = @()
     )
 
     try {
-        # Start the runspace
+        
         $runspace = [powershell]::Create()
         $null = $runspace.AddScript($ScriptBlock)
 
-        # Add arguments dynamically (optional)
         if ($Arguments) {
             foreach ($arg in $Arguments) {
                 $null = $runspace.AddArgument($arg)
             }
         }
 
-        # Set up asynchronous invocation and suppress output
-        $asyncResult = $runspace.BeginInvoke() | Out-Null
+        # Begin asynchronous execution , removes the need to wait for the runspace to complete, no CLI output is shown complement of $null
+        $runspace.BeginInvoke() | Out-Null
 
-        # Use a job to monitor and clean up the runspace
-        Start-Job -ScriptBlock {
-            param ($runspace, $asyncResult)
-
-            try {
-                # Wait for the runspace to complete and suppress output
-                $null = $runspace.EndInvoke($asyncResult)
-            } finally {
-                # Clean up the runspace
-                $runspace.Dispose()
-                Write-Host "Cleaned up runspace for $($runspace.InstanceId)" -ForegroundColor Green
-            }
-        } -ArgumentList $runspace, $asyncResult | Out-Null
-        
     } catch {
-        Write-Host "An error occurred while starting the script block: $_" -ForegroundColor Red
+        Write-Host "An error occurred while starting the runspace: $_" -ForegroundColor Red
     }
 }
+
+
 function Start-ExecutableBackground {    
     param (
         [Parameter(Mandatory = $true)]
