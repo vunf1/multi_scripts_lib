@@ -38,17 +38,17 @@ function Test-Syntax {
 
 # Main combining logic
 $scriptFiles = @(
-    "./CustomMessageBox.ps1",
-    "./DriversTest.ps1",
-    "./AudioTest.ps1",
-    "./CommandHelpers.ps1",
-    "./GetSystemInfo.ps1",
-    "./TweaksSystem.ps1",
-    "./main.ps1"
+    "./main/CustomMessageBox.ps1",
+    "./main/DriversTest.ps1",
+    "./main/AudioTest.ps1",
+    "./main/CommandHelpers.ps1",
+    "./main/GetSystemInfo.ps1",
+    "./main/TweaksSystem.ps1",
+    "./main/main.ps1"
 )
 
-$outputFile = "./infoplus.ps1"
-$errorLog = "./infoplus_error.log"
+$outputFile = ".\infoplus.ps1"
+$errorLog = ".\infoplus_error.log"
 
 if (Test-Path $outputFile) { Remove-Item -Path $outputFile -Force }
 if (Test-Path $errorLog) { Remove-Item -Path $errorLog -Force }
