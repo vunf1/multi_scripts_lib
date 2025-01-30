@@ -1,5 +1,7 @@
 <# Remove-Item -Path "$env:TEMP\\decoded_script.ps1" -Force #>
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+chcp 65001 | Out-Null # Set console code page to UTF-8
+
 $global:SystemInfoData = $null
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName WindowsFormsIntegration
@@ -258,10 +260,10 @@ Show-SystemInfo
 # Main Menu
 function Show-MainMenu {
     Write-Host "`nMain Menu - Choose an option (0 to EXIT):" -ForegroundColor Yellow
-    Write-Host "$unicodeEmojiFullwidthOne - System Information & Tweaks"
-    Write-Host "$unicodeEmojiFullwidthTwo - Drivers and Tests"
-    Write-Host "$unicodeEmojiFullwidthThree - System Maintenance"
-    Write-Host "$unicodeEmojiFullwidthZero - Exit"
+    Write-Host "1 - System Information & Tweaks"
+    Write-Host "2 - Drivers and Tests"
+    Write-Host "3 - System Maintenance"
+    Write-Host "0 - Exit"
     Write-Host " "
 }
 
@@ -274,7 +276,7 @@ function MainMenuOption {
         "0" { 
             Write-Host "`n $unicodeEmojiFan  Exiting the program. Goodbye! $unicodeEmojiFan" -ForegroundColor Red
             $global:exitProgram = $true
-<#             [System.Environment]::Exit(0) # Forcefully terminate the current console #>
+            [System.Environment]::Exit(0) # Forcefully terminate the current console
         }
     }
 }
@@ -284,12 +286,12 @@ function Show-SystemInfoMenu {
     Clear-Host
     Show-SystemInfo
     Write-Host "`nSystem Information & Tweaks - Choose an option:" -ForegroundColor Yellow
-    Write-Host "$unicodeEmojiFullwidthOne - Refresh System Information"
-    Write-Host "$unicodeEmojiFullwidthTwo - TWEAK - Display Not coming back when Suspended"
-    Write-Host "$unicodeEmojiFullwidthThree - Microsoft Activation Helper"
-    Write-Host "$unicodeEmojiFullwidthFour - Register OEM Key"
-    Write-Host "$unicodeEmojiFullwidthFive - Disable/Unlock Bitlocker (Documents)"
-    Write-Host "$unicodeEmojiFullwidthZero - Back to Main Menu"
+    Write-Host "1 - Refresh System Information"
+    Write-Host "2 - TWEAK - Display Not coming back when Suspended"
+    Write-Host "3 - Microsoft Activation Helper"
+    Write-Host "4 - Register OEM Key"
+    Write-Host "5 - Disable/Unlock Bitlocker (Documents)"
+    Write-Host "0 - Back to Main Menu"
     Write-Host " "
 }
 
@@ -348,11 +350,11 @@ function Show-DriversToolsMenu {
     Clear-Host
     Show-SystemInfo
     Write-Host "`nDrivers and Tools - Choose an option:" -ForegroundColor Yellow
-    Write-Host "$unicodeEmojiFullwidthOne - Drivers Links"
-    Write-Host "$unicodeEmojiFullwidthTwo - Keyboard Test"
-    Write-Host "$unicodeEmojiFullwidthThree - Battery Test"
-    Write-Host "$unicodeEmojiFullwidthFour - Audio Test"
-    Write-Host "$unicodeEmojiFullwidthZero - Back to Main Menu"
+    Write-Host "1 - Drivers Links"
+    Write-Host "2 - Keyboard Test"
+    Write-Host "3 - Battery Test"
+    Write-Host "4 - Audio Test"
+    Write-Host "0 - Back to Main Menu"
     Write-Host " "
 }
 
@@ -405,9 +407,9 @@ function Show-MaintenanceMenu {
     Clear-Host
     Show-SystemInfo
     Write-Host "`nSystem Maintenance - Choose an option:" -ForegroundColor Yellow
-    Write-Host "$unicodeEmojiFullwidthOne - Cache Clean"
-    Write-Host "$unicodeEmojiFullwidthTwo - Test Memory Windows - Restart Required"
-    Write-Host "$unicodeEmojiFullwidthZero - Back to Main Menu"
+    Write-Host "1 - Cache Clean"
+    Write-Host "2 - Test Memory Windows - Restart Required"
+    Write-Host "0 - Back to Main Menu"
     Write-Host " "
 }
 

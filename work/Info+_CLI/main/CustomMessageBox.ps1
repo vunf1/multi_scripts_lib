@@ -113,13 +113,14 @@ $unicodeEmojiCooling = [System.Text.Encoding]::UTF8.GetString([byte[]]@(0xF0, 0x
 $unicodeEmojiFan = [System.Text.Encoding]::UTF8.GetString([byte[]]@(0xF0, 0x9F, 0xA8, 0x81))  # 🌀 Fan / Airflow
 $unicodeEmojiStorage = [System.Text.Encoding]::UTF8.GetString([byte[]]@(0xF0, 0x9F, 0x93, 0x81))  # 📁 SSD / HDD Storage
 
-$unicodeEmojiFullwidthZero = ([char]0xFF10)  # ０ Fullwidth Zero
-$unicodeEmojiFullwidthOne = ([char]0xFF11)  # １ Fullwidth One
-$unicodeEmojiFullwidthTwo = ([char]0xFF12)  # ２ Fullwidth Two
-$unicodeEmojiFullwidthThree = ([char]0xFF13)  # ３ Fullwidth Three
-$unicodeEmojiFullwidthFour = ([char]0xFF14)  # ４ Fullwidth Four
-$unicodeEmojiFullwidthFive = ([char]0xFF15)  # ５ Fullwidth Five
-$unicodeEmojiFullwidthSix = ([char]0xFF16)  # ６ Fullwidth Six
-$unicodeEmojiFullwidthSeven = ([char]0xFF17)  # ７ Fullwidth Seven
-$unicodeEmojiFullwidthEight = ([char]0xFF18)  # ８ Fullwidth Eight
-$unicodeEmojiFullwidthNine = ([char]0xFF19)  # ９ Fullwidth Nine
+# Unicode Fullwidth Numbers (Large Format)
+$unicodeEmojiFullwidthZero = [System.Text.Encoding]::UTF8.GetString([byte[]]@(0xEF, 0xBC, 0x90))  # ０ Fullwidth Zero
+$unicodeEmojiFullwidthOne = [System.Text.Encoding]::UTF8.GetString([byte[]]@(0xEF, 0xBC, 0x91))  # １ Fullwidth One
+$unicodeEmojiFullwidthTwo = [System.Text.Encoding]::UTF8.GetString([byte[]]@(0xEF, 0xBC, 0x92))  # ２ Fullwidth Two
+$unicodeEmojiFullwidthThree = [System.Text.Encoding]::UTF8.GetString([byte[]]@(0xEF, 0xBC, 0x93))  # ３ Fullwidth Three
+$unicodeEmojiFullwidthFour = [System.Text.Encoding]::UTF8.GetString([byte[]]@(0xEF, 0xBC, 0x94))  # ４ Fullwidth Four
+$unicodeEmojiFullwidthFive = [System.Text.Encoding]::UTF8.GetString([byte[]]@(0xEF, 0xBC, 0x95))  # ５ Fullwidth Five
+$unicodeEmojiFullwidthSix = [System.Text.Encoding]::UTF8.GetString([byte[]]@(0xEF, 0xBC, 0x96))  # ６ Fullwidth Six
+$unicodeEmojiFullwidthSeven = [System.Text.Encoding]::UTF8.GetString([byte[]]@(0xEF, 0xBC, 0x97))  # ７ Fullwidth Seven
+$unicodeEmojiFullwidthEight = [System.Text.Encoding]::UTF8.GetString([byte[]]@(0xEF, 0xBC, 0x98))  # ８ Fullwidth Eight
+$unicodeEmojiFullwidthNine = [System.Text.Encoding]::UTF8.GetString([byte[]]@(0xEF, 0xBC, 0x99))  # ９ Fullwidth Nine
