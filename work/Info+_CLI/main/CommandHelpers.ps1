@@ -1,13 +1,13 @@
-<# $global:executables = @{    
+$global:executables = @{    
     "Keyboard" = "\\server\tools\#Keyboard Test.exe"
     "Battery"  = "\\server\tools\Tools\batteryinfoview\BatteryInfoView.exe"
     "Disk"     = "\\server\tools\Tools\CrystalDisk\CrystalDiskInfo.exe"
-} #>
-$global:executables = @{    
-    "Keyboard" = "C:\Users\Utilizador\Documents\NordLocker"
+}
+<# $global:executables = @{    
+    "Keyboard" = "C:\Users\Utilizador\NordLocker_338342\exc\scripts\various_scripts\multi_scripts_lib\work\Info+_CLI"
     "Battery"  = "C:\Users\Utilizador\Downloads\Adobe-GenP-3.4.2-CGP"
     "Disk"     = "C:\Users\Utilizador\Downloads\RAID_SATA"
-}
+} #>
 function Start-ScriptBlockInRunspace {
     param (
         [scriptblock]$ScriptBlock,
@@ -52,260 +52,119 @@ function Start-ExecutableBackground {
     # Run each executable in its own runspace
     $scriptBlockKeyboard = {
         param ($KeyboardDisplay, $KeyboardFilePath)
-
-        # Add the required .NET assemblies and the function within the runspace
+    
+        # Load required .NET assemblies
         Add-Type -AssemblyName System.Windows.Forms
-        Add-Type -AssemblyName System.Drawing
-        # Function to show a custom message box, hardcoded in here because when creating new instance of new threads it does not have access to the external function, need debug to find a way  
-        function Show-CustomMessageBox {
+    
+        # Function to show a MessageBox and ensure UI thread waits
+        function Show-Confirmation {
             param (
-                [string]$Message,
-                [string]$Title = "Notification",
-                [ValidateSet("Information", "Warning", "Error", "Critical")]
-                [string]$Type = "Information",
-                [ValidateSet("OK", "YesNo", "YesNoCancel", "RetryCancel", "AbortRetryIgnore")]
-                [string]$ButtonLayout = "YesNo",
-                [string]$CustomIconPath = "$PSScriptRoot\images\icons\icon2.ico" # Path to your default icon
+                [string]$message,
+                [string]$title
             )
-        
-            # Add required .NET assembly for Windows Forms
-            Add-Type -AssemblyName System.Windows.Forms
-            Add-Type -AssemblyName System.Drawing
-        
-            # Create the form
-            $form = New-Object System.Windows.Forms.Form
-            $form.Text = $Title
-            $form.StartPosition = "CenterScreen"
-            $form.Width = 270
-            $form.Height = 150
-            $form.FormBorderStyle = "FixedDialog"
-            $form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30) # Dark background
-            $form.MaximizeBox = $false
-            $form.MinimizeBox = $false
-            $form.ShowInTaskbar = $true
-            $form.Tag = $null # Use the Tag property to store the response
-        
-            # Set the custom icon
-            if (Test-Path $CustomIconPath) {
-                $form.Icon = New-Object System.Drawing.Icon($CustomIconPath)
-            } else {
-                Write-Host "Custom icon not found at $CustomIconPath. Using default icon." -ForegroundColor Yellow
-            }
-        
-            # Create the message label
-            $label = New-Object System.Windows.Forms.Label
-            $label.Text = $Message
-            $label.Font = New-Object System.Drawing.Font("Arial", 10, [System.Drawing.FontStyle]::Bold)
-            $label.ForeColor = [System.Drawing.Color]::White
-            $label.TextAlign = "MiddleCenter"
-            $label.Dock = "Top"
-            $label.Height = 50
-            $form.Controls.Add($label)
-        
-            # Create a FlowLayoutPanel to center buttons
-            $buttonPanel = New-Object System.Windows.Forms.FlowLayoutPanel
-            $buttonPanel.FlowDirection = "LeftToRight"
-            $buttonPanel.WrapContents = $false
-            $buttonPanel.Anchor = "Bottom"
-            $buttonPanel.Dock = "Bottom"
-            $buttonPanel.Padding = New-Object System.Windows.Forms.Padding(10)
-            $buttonPanel.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
-            $buttonPanel.AutoSize = $true
-            $buttonPanel.AutoSizeMode = "GrowAndShrink"
-            $form.Controls.Add($buttonPanel)
-        
-            # Helper function to create buttons
-            function CreateButton($text, $width, $height, $clickAction) {
-                $button = New-Object System.Windows.Forms.Button
-                $button.Text = $text
-                $button.Font = New-Object System.Drawing.Font("Arial", 9, [System.Drawing.FontStyle]::Regular)
-                $button.BackColor = [System.Drawing.Color]::White
-                $button.ForeColor = [System.Drawing.Color]::Black
-                $button.Width = $width
-                $button.Height = $height
-                $button.Margin = New-Object System.Windows.Forms.Padding(5) # Adds default spacing between buttons
-                $button.Add_Click($clickAction)
-                return $button
-            }
-        
-            # Add buttons based on the ButtonLayout parameter
-            switch ($ButtonLayout) {
-                "OK" {
-                    $okButton = CreateButton "OK" 80 30 { $form.Tag = "OK"; $form.Close() }
-                    $okButton.Margin = New-Object System.Windows.Forms.Padding(80, 0, 10, 0) 
-                    $buttonPanel.Controls.Add($okButton)
-                }
-                "YesNo" {
-                    $yesButton = CreateButton "Yes" 80 30 { $form.Tag = "Yes"; $form.Close() }
-                    $yesButton.Margin = New-Object System.Windows.Forms.Padding(10, 0, 50, 0) 
-                    $noButton = CreateButton "No" 80 30 { $form.Tag = "No"; $form.Close() }
-                    $noButton.Margin = New-Object System.Windows.Forms.Padding(10, 0, 50, 0) 
-                    $buttonPanel.Controls.Add($yesButton)
-                    $buttonPanel.Controls.Add($noButton)
-                }
-                "YesNoCancel" {
-                    $yesButton = CreateButton "Yes" 70 30 { $form.Tag = "Yes"; $form.Close() }
-                    $noButton = CreateButton "No" 70 30 { $form.Tag = "No"; $form.Close() }
-                    $cancelButton = CreateButton "Cancel" 70 30 { $form.Tag = "Cancel"; $form.Close() }
-                    $buttonPanel.Controls.Add($yesButton)
-                    $buttonPanel.Controls.Add($noButton)
-                    $buttonPanel.Controls.Add($cancelButton)
-                }
-            }
-        
-            # Center content dynamically on resize
-            $form.Add_SizeChanged({
-                $label.Width = $form.ClientSize.Width
-                $buttonPanel.Width = $form.ClientSize.Width
-                $buttonPanel.Left = ($form.ClientSize.Width - $buttonPanel.Width) / 2
-            })
-        
-            # Show the form and return the user's response
-            $form.ShowDialog() | Out-Null
-            return $form.Tag
+            
+            # Create a hidden form to enforce STA mode
+            $form = New-Object System.Windows.Forms.Form -Property @{ TopMost = $true; Visible = $false }
+            
+            # Show the MessageBox in a proper STA thread
+            $response = [System.Windows.Forms.MessageBox]::Show($form, $message, $title, 
+                [System.Windows.Forms.MessageBoxButtons]::YesNo, 
+                [System.Windows.Forms.MessageBoxIcon]::Question)
+            
+            return $response
         }
-
-
+    
+        function Show-Info {
+            param (
+                [string]$message,
+                [string]$title
+            )
+            $form = New-Object System.Windows.Forms.Form -Property @{ TopMost = $true; Visible = $false }
+            return [System.Windows.Forms.MessageBox]::Show($form, $message, $title, 
+                [System.Windows.Forms.MessageBoxButtons]::OK, 
+                [System.Windows.Forms.MessageBoxIcon]::Information)
+        }
+    
+        function Show-Warning {
+            param (
+                [string]$message,
+                [string]$title
+            )
+            $form = New-Object System.Windows.Forms.Form -Property @{ TopMost = $true; Visible = $false }
+            return [System.Windows.Forms.MessageBox]::Show($form, $message, $title, 
+                [System.Windows.Forms.MessageBoxButtons]::OK, 
+                [System.Windows.Forms.MessageBoxIcon]::Warning)
+        }
+    
         try {
             if (Test-Path $KeyboardFilePath) {
-                # Show confirmation message box
-                $response = Show-CustomMessageBox -Message "Do you want to launch Keyboard?" `
-                                                    -Title "Confirmation" `
-                                                    -ButtonLayout "YesNo"
-
-                if ($response -eq "Yes") {
+                # Show confirmation MessageBox in the main thread
+                $response = Show-Confirmation -message "Do you want to launch Keyboard?" -title "Confirmation"
+    
+                # Wait for user response
+                if ($response -eq [System.Windows.Forms.DialogResult]::Yes) {
                     Start-Process -FilePath $KeyboardFilePath
-                    Write-Host "Launching: $KeyboardDisplay from $KeyboardFilePath"
-                } elseif ($response -eq "No") {
-                    Write-Host "User chose not to launch: $KeyboardDisplay"
+                    Write-Host " Launching: $KeyboardDisplay from $KeyboardFilePath"
+                } elseif ($response -eq [System.Windows.Forms.DialogResult]::No) {
+                    Write-Host " User chose not to launch: $KeyboardDisplay"
                 } else {
-                    Write-Host "Unexpected response or dialog closed."
+                    Write-Host " Unexpected response or dialog closed."
                 }
             } else {
-                Show-CustomMessageBox -Message "File not found: $KeyboardFilePath" `
-                                        -Title "Error" `
-                                        -ButtonLayout "OK"
+                Show-Info -message " File not found: $KeyboardFilePath" -title "Error"
             }
         } catch {
-            Show-CustomMessageBox -Message "Error launching ${KeyboardDisplay}: $_" `
-                                    -Title "Critical Error" `
-                                    -ButtonLayout "OK"
+            Show-Warning -message " Error launching ${KeyboardDisplay}: $_" -title "Critical Error"
         }
     }
+    
+    
 
     $scriptBlockBattery = {
         param ($BatteryDisplay, $BatteryFilePath)
 
         # Add the required .NET assemblies and the function within the runspace
         Add-Type -AssemblyName System.Windows.Forms
-        Add-Type -AssemblyName System.Drawing
         # Function to show a custom message box, hardcoded in here because when creating new instance of new threads it does not have access to the external function, need debug to find a way  
-        function Show-CustomMessageBox {
+        function Show-Confirmation {
             param (
-                [string]$Message,
-                [string]$Title = "Notification",
-                [ValidateSet("Information", "Warning", "Error", "Critical")]
-                [string]$Type = "Information",
-                [ValidateSet("OK", "YesNo", "YesNoCancel", "RetryCancel", "AbortRetryIgnore")]
-                [string]$ButtonLayout = "YesNo",
-                [string]$CustomIconPath = "$PSScriptRoot\images\icons\icon2.ico" # Path to your default icon
+                [string]$message,
+                [string]$title
+            )
+            
+            return [System.Windows.Forms.MessageBox]::Show(
+                $message,
+                $title,
+                [System.Windows.Forms.MessageBoxButtons]::YesNo,
+                [System.Windows.Forms.MessageBoxIcon]::Question
+            )
+        }
+        function Show-Info {
+            param (
+                [string]$message,
+                [string]$title
             )
         
-            # Add required .NET assembly for Windows Forms
-            Add-Type -AssemblyName System.Windows.Forms
-            Add-Type -AssemblyName System.Drawing
+            return [System.Windows.Forms.MessageBox]::Show(
+                $message,
+                $title,
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Information
+            )
+        }
+
+        function Show-Warning {
+            param (
+                [string]$message,
+                [string]$title
+            )
         
-            # Create the form
-            $form = New-Object System.Windows.Forms.Form
-            $form.Text = $Title
-            $form.StartPosition = "CenterScreen"
-            $form.Width = 270
-            $form.Height = 150
-            $form.FormBorderStyle = "FixedDialog"
-            $form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30) # Dark background
-            $form.MaximizeBox = $false
-            $form.MinimizeBox = $false
-            $form.ShowInTaskbar = $true
-            $form.Tag = $null # Use the Tag property to store the response
-        
-            # Set the custom icon
-            if (Test-Path $CustomIconPath) {
-                $form.Icon = New-Object System.Drawing.Icon($CustomIconPath)
-            } else {
-                Write-Host "Custom icon not found at $CustomIconPath. Using default icon." -ForegroundColor Yellow
-            }
-        
-            # Create the message label
-            $label = New-Object System.Windows.Forms.Label
-            $label.Text = $Message
-            $label.Font = New-Object System.Drawing.Font("Arial", 10, [System.Drawing.FontStyle]::Bold)
-            $label.ForeColor = [System.Drawing.Color]::White
-            $label.TextAlign = "MiddleCenter"
-            $label.Dock = "Top"
-            $label.Height = 50
-            $form.Controls.Add($label)
-        
-            # Create a FlowLayoutPanel to center buttons
-            $buttonPanel = New-Object System.Windows.Forms.FlowLayoutPanel
-            $buttonPanel.FlowDirection = "LeftToRight"
-            $buttonPanel.WrapContents = $false
-            $buttonPanel.Anchor = "Bottom"
-            $buttonPanel.Dock = "Bottom"
-            $buttonPanel.Padding = New-Object System.Windows.Forms.Padding(10)
-            $buttonPanel.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
-            $buttonPanel.AutoSize = $true
-            $buttonPanel.AutoSizeMode = "GrowAndShrink"
-            $form.Controls.Add($buttonPanel)
-        
-            # Helper function to create buttons
-            function CreateButton($text, $width, $height, $clickAction) {
-                $button = New-Object System.Windows.Forms.Button
-                $button.Text = $text
-                $button.Font = New-Object System.Drawing.Font("Arial", 9, [System.Drawing.FontStyle]::Regular)
-                $button.BackColor = [System.Drawing.Color]::White
-                $button.ForeColor = [System.Drawing.Color]::Black
-                $button.Width = $width
-                $button.Height = $height
-                $button.Margin = New-Object System.Windows.Forms.Padding(5) # Adds default spacing between buttons
-                $button.Add_Click($clickAction)
-                return $button
-            }
-        
-            # Add buttons based on the ButtonLayout parameter
-            switch ($ButtonLayout) {
-                "OK" {
-                    $okButton = CreateButton "OK" 80 30 { $form.Tag = "OK"; $form.Close() }
-                    $okButton.Margin = New-Object System.Windows.Forms.Padding(80, 0, 10, 0) 
-                    $buttonPanel.Controls.Add($okButton)
-                }
-                "YesNo" {
-                    $yesButton = CreateButton "Yes" 80 30 { $form.Tag = "Yes"; $form.Close() }
-                    $yesButton.Margin = New-Object System.Windows.Forms.Padding(10, 0, 50, 0) 
-                    $noButton = CreateButton "No" 80 30 { $form.Tag = "No"; $form.Close() }
-                    $noButton.Margin = New-Object System.Windows.Forms.Padding(10, 0, 50, 0) 
-                    $buttonPanel.Controls.Add($yesButton)
-                    $buttonPanel.Controls.Add($noButton)
-                }
-                "YesNoCancel" {
-                    $yesButton = CreateButton "Yes" 70 30 { $form.Tag = "Yes"; $form.Close() }
-                    $noButton = CreateButton "No" 70 30 { $form.Tag = "No"; $form.Close() }
-                    $cancelButton = CreateButton "Cancel" 70 30 { $form.Tag = "Cancel"; $form.Close() }
-                    $buttonPanel.Controls.Add($yesButton)
-                    $buttonPanel.Controls.Add($noButton)
-                    $buttonPanel.Controls.Add($cancelButton)
-                }
-            }
-        
-            # Center content dynamically on resize
-            $form.Add_SizeChanged({
-                $label.Width = $form.ClientSize.Width
-                $buttonPanel.Width = $form.ClientSize.Width
-                $buttonPanel.Left = ($form.ClientSize.Width - $buttonPanel.Width) / 2
-            })
-        
-            # Show the form and return the user's response
-            $form.ShowDialog() | Out-Null
-            return $form.Tag
+            return [System.Windows.Forms.MessageBox]::Show(
+                $message,
+                $title,
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Warning
+            )
         }
 
 
@@ -316,14 +175,12 @@ function Start-ExecutableBackground {
                 Start-Process -FilePath $BatteryFilePath
                 Write-Host "Launching: $BatteryDisplay from $BatteryFilePath"
             } else {
-                Show-CustomMessageBox -Message "File not found: $BatteryFilePath" `
-                                        -Title "Error" `
-                                        -ButtonLayout "OK"
+                Show-Warning -message "File not found: $BatteryFilePath" `
+                                        -title "Error" 
             }
         } catch {
-            Show-CustomMessageBox -Message "Error launching ${BatteryDisplay}: $_" `
-                                    -Title "Critical Error" `
-                                    -ButtonLayout "OK"
+            Show-Warning -message "Error launching ${BatteryDisplay}: $_" `
+                                    -title "Critical Error" 
         }
     }
 
@@ -332,114 +189,46 @@ function Start-ExecutableBackground {
 
         # Add the required .NET assemblies and the function within the runspace
         Add-Type -AssemblyName System.Windows.Forms
-        Add-Type -AssemblyName System.Drawing
         # Function to show a custom message box, hardcoded in here because when creating new instance of new threads it does not have access to the external function, need debug to find a way  
-        function Show-CustomMessageBox {
+        function Show-Confirmation {
             param (
-                [string]$Message,
-                [string]$Title = "Notification",
-                [ValidateSet("Information", "Warning", "Error", "Critical")]
-                [string]$Type = "Information",
-                [ValidateSet("OK", "YesNo", "YesNoCancel", "RetryCancel", "AbortRetryIgnore")]
-                [string]$ButtonLayout = "YesNo",
-                [string]$CustomIconPath = "$PSScriptRoot\images\icons\icon2.ico" # Path to your default icon
+                [string]$message,
+                [string]$title
+            )
+            
+            return [System.Windows.Forms.MessageBox]::Show(
+                $message,
+                $title,
+                [System.Windows.Forms.MessageBoxButtons]::YesNo,
+                [System.Windows.Forms.MessageBoxIcon]::Question
+            )
+        }
+        function Show-Info {
+            param (
+                [string]$message,
+                [string]$title
             )
         
-            # Add required .NET assembly for Windows Forms
-            Add-Type -AssemblyName System.Windows.Forms
-            Add-Type -AssemblyName System.Drawing
+            return [System.Windows.Forms.MessageBox]::Show(
+                $message,
+                $title,
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Information
+            )
+        }
+
+        function Show-Warning {
+            param (
+                [string]$message,
+                [string]$title
+            )
         
-            # Create the form
-            $form = New-Object System.Windows.Forms.Form
-            $form.Text = $Title
-            $form.StartPosition = "CenterScreen"
-            $form.Width = 270
-            $form.Height = 150
-            $form.FormBorderStyle = "FixedDialog"
-            $form.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30) # Dark background
-            $form.MaximizeBox = $false
-            $form.MinimizeBox = $false
-            $form.ShowInTaskbar = $true
-            $form.Tag = $null # Use the Tag property to store the response
-        
-            # Set the custom icon
-            if (Test-Path $CustomIconPath) {
-                $form.Icon = New-Object System.Drawing.Icon($CustomIconPath)
-            } else {
-                Write-Host "Custom icon not found at $CustomIconPath. Using default icon." -ForegroundColor Yellow
-            }
-        
-            # Create the message label
-            $label = New-Object System.Windows.Forms.Label
-            $label.Text = $Message
-            $label.Font = New-Object System.Drawing.Font("Arial", 10, [System.Drawing.FontStyle]::Bold)
-            $label.ForeColor = [System.Drawing.Color]::White
-            $label.TextAlign = "MiddleCenter"
-            $label.Dock = "Top"
-            $label.Height = 50
-            $form.Controls.Add($label)
-        
-            # Create a FlowLayoutPanel to center buttons
-            $buttonPanel = New-Object System.Windows.Forms.FlowLayoutPanel
-            $buttonPanel.FlowDirection = "LeftToRight"
-            $buttonPanel.WrapContents = $false
-            $buttonPanel.Anchor = "Bottom"
-            $buttonPanel.Dock = "Bottom"
-            $buttonPanel.Padding = New-Object System.Windows.Forms.Padding(10)
-            $buttonPanel.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 30)
-            $buttonPanel.AutoSize = $true
-            $buttonPanel.AutoSizeMode = "GrowAndShrink"
-            $form.Controls.Add($buttonPanel)
-        
-            # Helper function to create buttons
-            function CreateButton($text, $width, $height, $clickAction) {
-                $button = New-Object System.Windows.Forms.Button
-                $button.Text = $text
-                $button.Font = New-Object System.Drawing.Font("Arial", 9, [System.Drawing.FontStyle]::Regular)
-                $button.BackColor = [System.Drawing.Color]::White
-                $button.ForeColor = [System.Drawing.Color]::Black
-                $button.Width = $width
-                $button.Height = $height
-                $button.Margin = New-Object System.Windows.Forms.Padding(5) # Adds default spacing between buttons
-                $button.Add_Click($clickAction)
-                return $button
-            }
-        
-            # Add buttons based on the ButtonLayout parameter
-            switch ($ButtonLayout) {
-                "OK" {
-                    $okButton = CreateButton "OK" 80 30 { $form.Tag = "OK"; $form.Close() }
-                    $okButton.Margin = New-Object System.Windows.Forms.Padding(80, 0, 10, 0) 
-                    $buttonPanel.Controls.Add($okButton)
-                }
-                "YesNo" {
-                    $yesButton = CreateButton "Yes" 80 30 { $form.Tag = "Yes"; $form.Close() }
-                    $yesButton.Margin = New-Object System.Windows.Forms.Padding(10, 0, 50, 0) 
-                    $noButton = CreateButton "No" 80 30 { $form.Tag = "No"; $form.Close() }
-                    $noButton.Margin = New-Object System.Windows.Forms.Padding(10, 0, 50, 0) 
-                    $buttonPanel.Controls.Add($yesButton)
-                    $buttonPanel.Controls.Add($noButton)
-                }
-                "YesNoCancel" {
-                    $yesButton = CreateButton "Yes" 70 30 { $form.Tag = "Yes"; $form.Close() }
-                    $noButton = CreateButton "No" 70 30 { $form.Tag = "No"; $form.Close() }
-                    $cancelButton = CreateButton "Cancel" 70 30 { $form.Tag = "Cancel"; $form.Close() }
-                    $buttonPanel.Controls.Add($yesButton)
-                    $buttonPanel.Controls.Add($noButton)
-                    $buttonPanel.Controls.Add($cancelButton)
-                }
-            }
-        
-            # Center content dynamically on resize
-            $form.Add_SizeChanged({
-                $label.Width = $form.ClientSize.Width
-                $buttonPanel.Width = $form.ClientSize.Width
-                $buttonPanel.Left = ($form.ClientSize.Width - $buttonPanel.Width) / 2
-            })
-        
-            # Show the form and return the user's response
-            $form.ShowDialog() | Out-Null
-            return $form.Tag
+            return [System.Windows.Forms.MessageBox]::Show(
+                $message,
+                $title,
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Warning
+            )
         }
 
 
@@ -450,14 +239,12 @@ function Start-ExecutableBackground {
                 Start-Process -FilePath $DiskFilePath
                 Write-Host "Launching: $DiskDisplay from $DiskFilePath"
             } else {
-                Show-CustomMessageBox -Message "File not found: $DiskFilePath" `
-                                        -Title "Error" `
-                                        -ButtonLayout "OK"
+                Show-Warning -message "File not found: $DiskFilePath" `
+                                        -title "Error" 
             }
         } catch {
-            Show-CustomMessageBox -Message "Error launching ${DiskDisplay}: $_" `
-                                    -Title "Critical Error" `
-                                    -ButtonLayout "OK"
+            Show-Warning -message "Error launching ${DiskDisplay}: $_" `
+                                    -title "Critical Error" 
         }
     }
 
@@ -569,11 +356,10 @@ function Disable-BitLockerOnAllDrives {
                     Write-Host "Password saved successfully for drive $($drive.MountPoint)." -ForegroundColor Green
 
                     # Prompt for confirmation to continue
-                    $response = Show-CustomMessageBox -Message "Are you sure you want to disable Bitlocker?" `
-                        -Title "Confirmation" `
-                        -ButtonLayout "YesNo"
+                    $response = Show-Confirmation -message "Are you sure you want to disable Bitlocker?" `
+                        -title "Confirmation"
 
-                    if ($response -ne "Yes") {
+                    if ($response -ne [System.Windows.Forms.DialogResult]::Yes) {
                         Write-Host "Operation cancelled by the user for drive $($drive.MountPoint)." -ForegroundColor Red
                         return
                     }

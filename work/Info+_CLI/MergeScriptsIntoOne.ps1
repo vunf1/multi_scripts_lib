@@ -38,12 +38,12 @@ function Test-Syntax {
 
 # Main combining logic
 $scriptFiles = @(
-    "./main/CustomMessageBox.ps1",
     "./main/DriversTest.ps1",
     "./main/AudioTest.ps1",
     "./main/CommandHelpers.ps1",
     "./main/GetSystemInfo.ps1",
     "./main/TweaksSystem.ps1",
+    "./main/CustomMessageBox.ps1",
     "./main/main.ps1"
 )
 

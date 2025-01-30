@@ -289,15 +289,15 @@ function Get-ActivationDetails {
         $activationStatusPattern = "(License Status|Estado da Licen[çc]a|Estado da Ativa[çc][ãa]o):\s*(Licensed|Licenciado)"
 
         if ($slmgrOutput -match $activationStatusPattern) {
-            $status = "Activated"
+            $status = "$unicodeEmojiCheckMark Activated"
             $activationColor = "Green"
         } else {
-            $status = "Not Activated"
+            $status = "$unicodeEmojiCrossMark Not Activated"
             $activationColor = "Red"
         }
 
         if ($status -eq "Unknown") {
-            Write-Host "Unexpected slmgr output for debug:" -ForegroundColor Yellow
+            Write-Host "$unicodeEmojiWarning Unexpected slmgr output for debug:" -ForegroundColor Yellow
             Write-Host $slmgrOutput
         }
 
@@ -308,7 +308,7 @@ function Get-ActivationDetails {
     } catch {
         Write-Host "An error occurred while checking activation status: $_" -ForegroundColor Red
         return [PSCustomObject]@{
-            Status          = "Unknown"
+            Status          = "$unicodeEmojiWarning Unknown"
             ActivationColor = "Red"
         }
     }
@@ -356,7 +356,7 @@ function Show-WindowsProductKeys {
                     $installedKey = Convert-Key -DigitalProductId $license.DigitalProductId
                 }
             } catch {
-                $installedKey = "Not Found"
+                $installedKey = "$unicodeEmojiCrossMark Not Found"
             }   
         }
         # Check if the installed key matches a generic key
@@ -448,14 +448,14 @@ function Get-OEMKey{
         # Validate OEM key or return Not Found
         if (-not $oemKey -or $oemKey -eq "") {
             #Write-Host "OEM key retrieval failed. Returning 'Not Found'."
-            return "Not Found"
+            return "$unicodeEmojiCrossMark Not Found"
         } else {
             #Write-Host "OEM key retrieved successfully: $oemKey"
             return $oemKey
         }
     } catch {
         #Write-Host "An unexpected error occurred while retrieving OEM key: $_"
-        return "Error"
+        return "$unicodeEmojiWarning Error"
     }
 
 }
@@ -652,7 +652,7 @@ function Get-BitLockerStatus {
 
 
 function Get-SystemInfo {
-    Write-Host " `nRefreshing System Information..." -ForegroundColor Yellow
+    Write-Host " `n$unicodeEmojiCooling $unicodeEmojiCooling Refreshing System Information... $unicodeEmojiCooling $unicodeEmojiCooling" -ForegroundColor Yellow
 
     # Define tasks dynamically with a script block
     $tasks = @(
@@ -670,12 +670,12 @@ function Get-SystemInfo {
 
     $systemInfo = [PSCustomObject]@{}
 
-    Write-Host "`nIF STUCK PRESS [ENTER] <<<< " -ForegroundColor Red
+    Write-Host "`n$unicodeEmojiLock $unicodeEmojiLock PRESS[ENTER] $unicodeEmojiLock $unicodeEmojiLock<<<< " -ForegroundColor Red
     for ($i = 0; $i -lt $totalTasks; $i++) {
         $taskName = $tasks[$i].Name
         $task = $tasks[$i].Task
 
-        Write-Host "Getting: $taskName Data... " -ForegroundColor Cyan -NoNewline
+        Write-Host " $unicodeEmojiInformation : $taskName Data...       $unicodeEmojiHourglass " -ForegroundColor Cyan -NoNewline
 
         try {
             $executionTime = Measure-Command {
@@ -734,6 +734,6 @@ foreach ($key in $data.PSObject.Properties) {
         }
     } else {
         # Simple property output
-        Write-Host "$($key.Name): $($key.Value)"
+        Write-Host "$($key.Name): $($key.Value)"    
     }
  #>

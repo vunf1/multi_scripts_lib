@@ -1,4 +1,5 @@
-Remove-Item -Path "$env:TEMP\\decoded_script.ps1" -Force
+<# Remove-Item -Path "$env:TEMP\\decoded_script.ps1" -Force #>
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $global:SystemInfoData = $null
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName WindowsFormsIntegration
@@ -55,7 +56,7 @@ $host.UI.RawUI.WindowTitle = "Info+"
 Set-ConsoleWindowPosition -OffsetX 10 -OffsetY 10
 #$host.UI.RawUI.BufferSize = New-Object -TypeName System.Management.Automation.Host.Size(1, 10)
 $host.UI.RawUI.BackgroundColor = "Black"
-<# if ($PSScriptRoot) {
+if ($PSScriptRoot) {
     # Load dependent scripts from the current directory during development
     . "$PSScriptRoot\CustomMessageBox.ps1"
     . "$PSScriptRoot\DriversTest.ps1"
@@ -70,7 +71,7 @@ $host.UI.RawUI.BackgroundColor = "Black"
     . "./CommandHelpers.ps1"
     . "./GetSystemInfo.ps1"
     . "./TweaksSystem.ps1"
-} #>
+}
 
 function Start-MemoryDiagnosticWithTask {
     try {
@@ -106,12 +107,19 @@ function Show-SystemInfo {
     }
     $data = $global:SystemInfoData
     Clear-Host
+    Write-Host "=========================================================" -ForegroundColor Green
 
+    Write-Host "       Developed with " -ForegroundColor White -NoNewline
+    Write-Host ([char]0x2665) -ForegroundColor Red -NoNewline 
+    Write-Host " by " -ForegroundColor White -NoNewline
+    Write-Host "Vunf1" -ForegroundColor Green -NoNewline
+    Write-Host " for " -ForegroundColor White -NoNewline
+    Write-Host "HardStock" -ForegroundColor Cyan    
+    
     Write-Host "=========================================================" -ForegroundColor Green
-    Write-Host "       Developed with " -ForegroundColor White -NoNewline; Write-Host ([char]0x2665) -ForegroundColor Red -NoNewline
-    Write-Host " by" -NoNewline; Write-Host " Vunf1" -ForegroundColor Green -NoNewline; Write-Host " for " -NoNewline; Write-Host "HardStock" -ForegroundColor Cyan    
-    Write-Host "=========================================================" -ForegroundColor Green
-    Write-Host "`nSystem Information:" -ForegroundColor Cyan
+    Write-Host "`n"
+    
+    Write-Host "`n$unicodeEmojiMagnifyingGlass System Information:" -ForegroundColor Cyan
 
     # Disk Info as a Table
 <#     if ($data.'Disk Info' -and $data.'Disk Info'.Count -gt 0) {
@@ -128,9 +136,9 @@ function Show-SystemInfo {
         Write-Host "No Disk Information Available" -ForegroundColor Red
     } #>
     
-    Write-Host " ------------------------------------|------------------------------------------- "
-    Write-Host "| RAM Information                    | Slot Information                          |"
-    Write-Host " ------------------------------------|------------------------------------------- "
+    Write-Host " ------------------------------------|------------------------------------------- " -ForegroundColor White
+    Write-Host " | $unicodeEmojiLightBulb RAM Information                | $unicodeEmojiComputer Slot Information                      |" -ForegroundColor Cyan
+    Write-Host " ------------------------------------|------------------------------------------- " -ForegroundColor White
     
     # Prepare RAM Info Lines
     $ramInfoLines = @(
@@ -169,7 +177,7 @@ function Show-SystemInfo {
         foreach ($cpu in $data.'Processor Info'.Info) {
             if ($first) {
                 # Write the first CPU entry after the "| CPU                        |"
-                Write-Host "| CPU                        " -NoNewline
+                Write-Host "$unicodeEmojiCPU CPU                        " -NoNewline
                 Write-Host " $($cpu.Name) $($cpu.MaxClockSpeed) $($cpu.Cores) $($cpu.LogicalProcessors) $($cpu.Socket)" -ForegroundColor $cpuColor
                 $first = $false
             } else {
@@ -178,7 +186,7 @@ function Show-SystemInfo {
             }
         }
     } else {
-        Write-Host "| CPU                        No CPU information available" -ForegroundColor Red
+        Write-Host "$unicodeEmojiCPU CPU                        No CPU information available" -ForegroundColor Red
     }
 
     # GPU Info Display
@@ -191,7 +199,7 @@ function Show-SystemInfo {
 
             if ($first) {
                 # Write the first GPU entry after the "| GPU                        |"
-                Write-Host "| GPU                        " -NoNewline; Write-Host " $($gpu.Name) ($($gpu.Dedicated))" -ForegroundColor $gpuColor
+                Write-Host "$unicodeEmojiChip GPU                        " -NoNewline; Write-Host " $($gpu.Name) ($($gpu.Dedicated))" -ForegroundColor $gpuColor
                 $first = $false
             } else {
                 # Indent additional GPU entries to align with the first one
@@ -199,17 +207,17 @@ function Show-SystemInfo {
             }
         }
     } else {
-        Write-Host "| GPU                        No GPU information available" -ForegroundColor Red
+        Write-Host "$unicodeEmojiChip GPU                        No GPU information available" -ForegroundColor Red
     }
 
     # Windows Version
-    Write-Host "| Windows Version             $($data.'Windows Version')"
+    Write-Host "$unicodeEmojiBug Windows Version             $($data.'Windows Version')"
 
     # Activation Status
     $activationColor = if ($data.'Activation Details'.ActivationColor -and [Enum]::IsDefined([System.ConsoleColor], $data.'Activation Details'.ActivationColor)) { 
         $data.'Activation Details'.ActivationColor 
     } else { "Gray" }
-    Write-Host "| Activation Status          " -NoNewline
+    Write-Host "$unicodeEmojiNetwork Activation Status          " -NoNewline
     Write-Host " $($data.'Activation Details'.Status)" -ForegroundColor $activationColor
 
     # Product Keys
@@ -221,10 +229,10 @@ function Show-SystemInfo {
             $productKeys.InstalledKey.Color 
         } else { "Gray" }
 
-        Write-Host "| Installed Product Key      " -NoNewline
+        Write-Host "$unicodeEmojiStorage Installed Product Key      " -NoNewline
         Write-Host " $($productKeys.InstalledKey.Value)" -ForegroundColor $installedKeyColor
     } else {
-        Write-Host "| Installed Product Key      Not Found" -ForegroundColor Red
+        Write-Host "$unicodeEmojiStorage Installed Product Key      Not Found" -ForegroundColor Red
     }
 
     # OEM Product Key
@@ -233,10 +241,10 @@ function Show-SystemInfo {
             $productKeys.OEMKey.Color 
         } else { "Gray" }
 
-        Write-Host "| OEM Product Key            " -NoNewline
+        Write-Host "$unicodeEmojiStorage OEM Product Key            " -NoNewline
         Write-Host " $($productKeys.OEMKey.Value)" -ForegroundColor $oemKeyColor
     } else {
-        Write-Host "| OEM Product Key            Not Found" -ForegroundColor Red
+        Write-Host "$unicodeEmojiStorage OEM Product Key            Not Found" -ForegroundColor Red
     }
 
 }
@@ -250,10 +258,10 @@ Show-SystemInfo
 # Main Menu
 function Show-MainMenu {
     Write-Host "`nMain Menu - Choose an option (0 to EXIT):" -ForegroundColor Yellow
-    Write-Host "1. System Information & Tweaks"
-    Write-Host "2. Drivers and Tests"
-    Write-Host "3. System Maintenance"
-    Write-Host "0. Exit"
+    Write-Host "$unicodeEmojiFullwidthOne - System Information & Tweaks"
+    Write-Host "$unicodeEmojiFullwidthTwo - Drivers and Tests"
+    Write-Host "$unicodeEmojiFullwidthThree - System Maintenance"
+    Write-Host "$unicodeEmojiFullwidthZero - Exit"
     Write-Host " "
 }
 
@@ -264,9 +272,9 @@ function MainMenuOption {
         "2" { Show-DriversToolsSubmenu }
         "3" { Show-MaintenanceSubmenu }
         "0" { 
-            Write-Host "`nExiting the program. Goodbye!" -ForegroundColor Red
+            Write-Host "`n $unicodeEmojiFan  Exiting the program. Goodbye! $unicodeEmojiFan" -ForegroundColor Red
             $global:exitProgram = $true
-            [System.Environment]::Exit(0) # Forcefully terminate the current console
+<#             [System.Environment]::Exit(0) # Forcefully terminate the current console #>
         }
     }
 }
@@ -276,12 +284,12 @@ function Show-SystemInfoMenu {
     Clear-Host
     Show-SystemInfo
     Write-Host "`nSystem Information & Tweaks - Choose an option:" -ForegroundColor Yellow
-    Write-Host "1. Refresh System Information"
-    Write-Host "2. TWEAK - Display Not coming back when Suspended"
-    Write-Host "3. Microsoft Activation Helper"
-    Write-Host "4. Register OEM Key"
-    Write-Host "5. Disable/Unlock Bitlocker (Documents)"
-    Write-Host "0. Back to Main Menu"
+    Write-Host "$unicodeEmojiFullwidthOne - Refresh System Information"
+    Write-Host "$unicodeEmojiFullwidthTwo - TWEAK - Display Not coming back when Suspended"
+    Write-Host "$unicodeEmojiFullwidthThree - Microsoft Activation Helper"
+    Write-Host "$unicodeEmojiFullwidthFour - Register OEM Key"
+    Write-Host "$unicodeEmojiFullwidthFive - Disable/Unlock Bitlocker (Documents)"
+    Write-Host "$unicodeEmojiFullwidthZero - Back to Main Menu"
     Write-Host " "
 }
 
@@ -303,6 +311,8 @@ function SystemInfoOption {
         "4" {
             Write-Host "`nRegistering OEM Key..." -ForegroundColor Green
             Register-OEMKey
+            Start-Sleep -Seconds 2
+            Show-SystemInfo -Command "update"
         }
         "5" {
             Write-Host "`nDisabling/Unlocking Bitlocker..." -ForegroundColor Green
@@ -338,11 +348,11 @@ function Show-DriversToolsMenu {
     Clear-Host
     Show-SystemInfo
     Write-Host "`nDrivers and Tools - Choose an option:" -ForegroundColor Yellow
-    Write-Host "1. Drivers Links"
-    Write-Host "2. Keyboard Test"
-    Write-Host "3. Battery Test"
-    Write-Host "4. Audio Test"
-    Write-Host "0. Back to Main Menu"
+    Write-Host "$unicodeEmojiFullwidthOne - Drivers Links"
+    Write-Host "$unicodeEmojiFullwidthTwo - Keyboard Test"
+    Write-Host "$unicodeEmojiFullwidthThree - Battery Test"
+    Write-Host "$unicodeEmojiFullwidthFour - Audio Test"
+    Write-Host "$unicodeEmojiFullwidthZero - Back to Main Menu"
     Write-Host " "
 }
 
@@ -395,9 +405,9 @@ function Show-MaintenanceMenu {
     Clear-Host
     Show-SystemInfo
     Write-Host "`nSystem Maintenance - Choose an option:" -ForegroundColor Yellow
-    Write-Host "1. Cache Clean"
-    Write-Host "2. Test Memory Windows - Restart Required"
-    Write-Host "0. Back to Main Menu"
+    Write-Host "$unicodeEmojiFullwidthOne - Cache Clean"
+    Write-Host "$unicodeEmojiFullwidthTwo - Test Memory Windows - Restart Required"
+    Write-Host "$unicodeEmojiFullwidthZero - Back to Main Menu"
     Write-Host " "
 }
 

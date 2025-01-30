@@ -1,8 +1,8 @@
 
 function Clear-SystemCache {
-    $confirmation = Show-CustomMessageBox -Message "Are you sure you want to clean the system cache?" -Title "Confirmation" -ButtonLayout "YesNo"
+    $confirmation = Show-Confirmation -message "Are you sure you want to clean the system cache?" -title "Confirmation"
 
-    if ($confirmation -eq "Yes") {
+    if ($confirmation -eq [System.Windows.Forms.DialogResult]::Yes) {
         Write-Host "`nCleaning System Cache..."
 
         Write-Host "Cleaning up Windows Component Store..."
@@ -95,11 +95,10 @@ function Register-OEMKey {
         }
 
         # Display the confirmation dialog
-        $response = Show-CustomMessageBox -Message "Do you want to register the OEM Key?" `
-            -Title "Confirmation" `
-            -ButtonLayout "YesNo" 
+        $response = Show-Confirmation -Message "Do you want to register the OEM Key?" `
+            -Title "Confirmation" 
         
-        if ($response -ne "Yes") {
+        if ($response -ne [System.Windows.Forms.DialogResult]::Yes) {
             Write-Host "Operation cancelled by user." -ForegroundColor Red
             return
         }
@@ -162,18 +161,29 @@ function Register-OEMKey {
     }
 }
 function Start-ActivationScript {
+    param (
+        [string]$Url = "https://get.activated.win",
+        [string]$OutFile = "$env:TEMP\safe_script.ps1"
+    )
+
+    # Step 1: Download the script safely
     try {
-        $activationScriptUri = "https://get.activated.win"
-
-        Write-Host "Fetching and executing the $activationScriptUri Script..." -ForegroundColor Yellow
-
-        # Use Start-Process to execute the command
-        Start-Process -FilePath "powershell.exe" `
-                      -ArgumentList "-NoProfile", "-Command", "iwr -UseBasicParsing $activationScriptUri | iex" `
-                      -NoNewWindow
-
-        Write-Host "$activationScriptUri started successfully." -ForegroundColor Green
-    } catch {
-        Write-Host "An error occurred while starting the Activation Script: $_" -ForegroundColor Red
+        Invoke-RestMethod -Uri $Url -OutFile $OutFile -ErrorAction Stop
+        Write-Host " Script downloaded to: $OutFile" -ForegroundColor Green
     }
+    catch {
+        Write-Host " Failed to download script." -ForegroundColor Red
+        return
+    }
+
+    # Step 2: Execute the script in the same session without blocking
+    Write-Host " Executing script in background... (It will auto-delete after execution)" -ForegroundColor Yellow
+    Start-Job -ScriptBlock {
+        param ($OutFile)
+        powershell -ExecutionPolicy Bypass -File $OutFile
+        Remove-Item -Force $OutFile
+    } -ArgumentList $OutFile
+
+    # Step 3: Allow the script to continue running in the background
+    Write-Host "🔄 Script is running in the background. Main script continues." -ForegroundColor Cyan
 }
