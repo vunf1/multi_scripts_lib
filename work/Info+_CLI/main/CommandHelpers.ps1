@@ -1,13 +1,18 @@
-$global:executables = @{    
-    "Keyboard" = "\\server\tools\#Keyboard Test.exe"
-    "Battery"  = "\\server\tools\Tools\batteryinfoview\BatteryInfoView.exe"
-    "Disk"     = "\\server\tools\Tools\CrystalDisk\CrystalDiskInfo.exe"
+if($Local){
+    $global:executables = @{    
+        "Keyboard" = "C:\Users\Utilizador\NordLocker_338342\exc\scripts\various_scripts\multi_scripts_lib\work\Info+_CLI"
+        "Battery"  = "C:\Users\Utilizador\Downloads\Adobe-GenP-3.4.2-CGP"
+        "Disk"     = "C:\Users\Utilizador\Downloads\RAID_SATA"
+    }
+
+} else {
+    $global:executables = @{    
+        "Keyboard" = "\\server\tools\#Keyboard Test.exe"
+        "Battery"  = "\\server\tools\Tools\batteryinfoview\BatteryInfoView.exe"
+        "Disk"     = "\\server\tools\Tools\CrystalDisk\CrystalDiskInfo.exe"
+    }    
 }
-<# $global:executables = @{    
-    "Keyboard" = "C:\Users\Utilizador\NordLocker_338342\exc\scripts\various_scripts\multi_scripts_lib\work\Info+_CLI"
-    "Battery"  = "C:\Users\Utilizador\Downloads\Adobe-GenP-3.4.2-CGP"
-    "Disk"     = "C:\Users\Utilizador\Downloads\RAID_SATA"
-} #>
+
 function Start-ScriptBlockInRunspace {
     param (
         [scriptblock]$ScriptBlock,
@@ -259,7 +264,9 @@ function Start-ExecutableBackground {
 }
 function Start-Files {
     Start-ExecutableBackground -Executables $global:executables
-    Clear-Host
+    if(-not $Debug){
+        Clear-Host
+    }
 }
 function Get-EdgePath {
     # Try to find msedge.exe in the system's PATH
@@ -405,59 +412,6 @@ function Disable-BitLockerOnAllDrives {
     }
 }
 
-function Get-MemoryTypeName {
-    param ([int]$MemoryType)
-    switch ($MemoryType) {
-        0  { "Unknown" }
-        1  { "Other" }
-        2  { "DRAM" }
-        3  { "Synchronous DRAM" }
-        4  { "Cache DRAM" }
-        5  { "EDO" }
-        6  { "EDRAM" }
-        7  { "VRAM" }
-        8  { "SRAM" }
-        9  { "RAM" }
-        10 { "ROM" }
-        11 { "Flash" }
-        12 { "EEPROM" }
-        13 { "FEPROM" }
-        14 { "EPROM" }
-        15 { "CDRAM" }
-        16 { "3DRAM" }
-        17 { "SDRAM" }
-        18 { "SGRAM" }
-        19 { "RDRAM" }
-        20 { "DDR" }
-        21 { "DDR2" }
-        22 { "DDR2 FB-DIMM" }
-        23 { "Reserved" }
-        24 { "DDR3" }
-        25 { "FBD2" }
-        26 { "DDR4" }
-        27 { "DDR5" }
-        28 { "LPDDR" }
-        29 { "LPDDR2" }
-        30 { "LPDDR3" }
-        31 { "LPDDR4" }
-        32 { "Logical non-volatile device" }
-        33 { "HBM" }        # High Bandwidth Memory
-        34 { "HBM2" }       # High Bandwidth Memory 2
-        35 { "DDR4E-SDRAM" }
-        36 { "LPDDR4X" }
-        37 { "LPDDR5" }
-        38 { "LPDDR5X" }
-        39 { "HBM3" }       # High Bandwidth Memory 3
-        40 { "GDDR" }
-        41 { "GDDR2" }
-        42 { "GDDR3" }
-        43 { "GDDR4" }
-        44 { "GDDR5" }
-        45 { "GDDR6" }
-        46 { "GDDR6X" }     # NVIDIA proprietary memory standard
-        default { "Unknown or Reserved" }
-    }
-}
 
 $WindowsGenericKeys = @(
     # Windows 11 RTM Generic Keys

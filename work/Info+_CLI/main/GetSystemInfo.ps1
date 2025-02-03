@@ -1,197 +1,175 @@
-
-<# if ($PSScriptRoot) {
-    # Load dependent scripts from the current directory during development
-    . "$PSScriptRoot\CommandHelpers.ps1"
-}else {
-    . "./CommandHelpers.ps1"
-} #>
-
-function Get-DiskInfo {
-    try {
-        # Initialize the result array
-        $Disks = @()
-
-        # Retrieve volumes and ensure they're valid
-        $volumes = Get-Volume | Where-Object { $null -ne $_.DriveLetter }
-        if (-not $volumes -or $volumes.Count -eq 0) {
-            Write-Host "No volumes found or no volumes with drive letters."
-            return @([PSCustomObject]@{ DriveLetter = "None"; DiskName = "No Disk Found"; TotalSizeGB = "0 GB"; UsedSizeGB = "0 GB" })
-        }
-
-        Write-Host "Volumes retrieved: $($volumes.Count)" -NoNewline
-
-        # Process each volume
-        foreach ($volume in $volumes) {
-            $diskName = "Unknown"
-            $totalSizeGB = if ($null -ne $volume.Size ) { [math]::round($volume.Size / 1GB, 2) } else { 0 }
-            $usedSizeGB = if ($null -ne $volume.Size -and $null -ne $volume.SizeRemaining  ) { [math]::round(($volume.Size - $volume.SizeRemaining) / 1GB, 2) } else { 0 }
-
-            try {
-                # Retrieve partition and physical disk details
-                $partition = Get-Partition -DriveLetter $volume.DriveLetter -ErrorAction SilentlyContinue
-                if ($partition) {
-                    $diskNumber = $partition.DiskNumber
-                    $physicalDisk = Get-PhysicalDisk | Where-Object { $_.DeviceID -eq $diskNumber }
-                    if ($physicalDisk) {
-                        $diskName = $physicalDisk.FriendlyName
-                    } else {
-                        Write-Host "No matching physical disk found for DiskNumber=$diskNumber."
-                    }
-                } else {
-                    Write-Host "No partition found for DriveLetter=$($volume.DriveLetter)."
-                }
-            } catch {
-                Write-Host "Error retrieving disk details for DriveLetter=$($volume.DriveLetter): $_"
-            }
-
-            # Fallback: Attempt to retrieve disk data from Win32_LogicalDisk
-            if ($diskName -eq "Unknown") {
-                try {
-                    $logicalDisk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID = '$($volume.DriveLetter):'"
-                    if ($logicalDisk) {
-                        $diskName = $logicalDisk.VolumeName
-                        Write-Host "Fallback used Win32_LogicalDisk for DriveLetter=$($volume.DriveLetter): DiskName=$diskName."
-                    }
-                } catch {
-                    Write-Host "Fallback retrieval using Win32_LogicalDisk failed for DriveLetter=$($volume.DriveLetter): $_"
-                }
-            }
-
-            # Add the disk details to the result array
-            $diskObject = [PSCustomObject]@{
-                DriveLetter = $volume.DriveLetter
-                DiskName    = $diskName
-                TotalSizeGB = "$totalSizeGB GB"
-                UsedSizeGB  = "$usedSizeGB GB"
-            }
-            $Disks += $diskObject
-        }
-
-        # Return results or a default object if no valid disks are found
-        if ($Disks.Count -gt 0) {
-            return $Disks
-        } else {
-            Write-Host "No valid disks found after processing volumes."
-            return @([PSCustomObject]@{ DriveLetter = "None"; DiskName = "No Disk Found"; TotalSizeGB = "0 GB"; UsedSizeGB = "0 GB" })
-        }
-    } catch {
-        Write-Host "An error occurred while retrieving disk information: $_"
-        return @([PSCustomObject]@{ DriveLetter = "Error"; DiskName = "Error"; TotalSizeGB = "Error"; UsedSizeGB = "Error" })
+function Get-MemoryTypeName {
+    param ([int]$MemoryType)
+    switch ($MemoryType) {
+        0  { "Unknown" }
+        1  { "Other" }
+        2  { "DRAM" }
+        3  { "Synchronous DRAM" }
+        4  { "Cache DRAM" }
+        5  { "EDO" }
+        6  { "EDRAM" }
+        7  { "VRAM" }
+        8  { "SRAM" }
+        9  { "RAM" }
+        10 { "ROM" }
+        11 { "Flash" }
+        12 { "EEPROM" }
+        13 { "FEPROM" }
+        14 { "EPROM" }
+        15 { "CDRAM" }
+        16 { "3DRAM" }
+        17 { "SDRAM" }
+        18 { "SGRAM" }
+        19 { "RDRAM" }
+        20 { "DDR" }
+        21 { "DDR2" }
+        22 { "DDR2 FB-DIMM" }
+        23 { "Reserved" }
+        24 { "DDR3" }
+        25 { "FBD2" }
+        26 { "DDR4" }
+        27 { "DDR5" }
+        28 { "LPDDR" }
+        29 { "LPDDR2" }
+        30 { "LPDDR3" }
+        31 { "LPDDR4" }
+        32 { "Logical non-volatile device" }
+        33 { "HBM" }        # High Bandwidth Memory
+        34 { "HBM2" }       # High Bandwidth Memory 2
+        35 { "DDR4E-SDRAM" }
+        36 { "LPDDR4X" }
+        37 { "LPDDR5" }
+        38 { "LPDDR5X" }
+        39 { "HBM3" }       # High Bandwidth Memory 3
+        40 { "GDDR" }
+        41 { "GDDR2" }
+        42 { "GDDR3" }
+        43 { "GDDR4" }
+        44 { "GDDR5" }
+        45 { "GDDR6" }
+        46 { "GDDR6X" }     # NVIDIA proprietary memory standard
+        default { "Unknown or Reserved" }
     }
 }
-function Open-ThisComputer {
-    try {
-        Start-Process -FilePath "explorer.exe" -ArgumentList "shell:MyComputerFolder"
-    } catch {
-        Write-Host "Failed to open 'This Computer': $_" -ForegroundColor Red
-    }
-}
-
 function Get-TotalSticksRam {
-
     try {
-        # Primary method: Get-CimInstance
-        $totalMemory = [math]::round((Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue).TotalPhysicalMemory / 1GB, 2)
-
-        $memoryModules = Get-CimInstance -ClassName Win32_PhysicalMemory -ErrorAction SilentlyContinue
-        $totalSlots = (Get-CimInstance -ClassName Win32_PhysicalMemoryArray -ErrorAction SilentlyContinue).MemoryDevices
-        $usedSlots = $memoryModules.Count
-
-        $onboardMemory = $memoryModules | Where-Object { $_.FormFactor -eq 12 } # FormFactor 12 indicates onboard memory
-        $onboardMemorySize = if ($onboardMemory) {
-            [math]::round(($onboardMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB, 2)
+        # Retrieve total physical memory (in GB) from Win32_ComputerSystem.
+        $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+        $totalMemoryGB = if ($computerSystem.TotalPhysicalMemory) {
+            [math]::round($computerSystem.TotalPhysicalMemory / 1GB, 2)
         } else {
             0
         }
 
+        # Retrieve memory modules from Win32_PhysicalMemory.
+        $memoryModules = Get-CimInstance -ClassName Win32_PhysicalMemory -ErrorAction SilentlyContinue
+
+        # Retrieve physical memory array to get the total number of memory slots.
+        $physicalMemoryArray = Get-CimInstance -ClassName Win32_PhysicalMemoryArray -ErrorAction SilentlyContinue
+        $totalSlots = if ($physicalMemoryArray -and $physicalMemoryArray.MemoryDevices -gt 0) {
+            $physicalMemoryArray.MemoryDevices
+        }
+        else {
+            # If the physical array isn’t reporting correctly, assume only the modules present.
+            $memoryModules.Count
+        }
+        $usedSlots = if ($memoryModules) { $memoryModules.Count } else { 0 }
+
+        # Determine onboard memory.
+        # (Often FormFactor=12 indicates onboard memory. Note that on some systems this may differ.)
+        $onboardMemoryModules = $memoryModules | Where-Object { $_.FormFactor -eq 12 }
+        $onboardMemorySizeGB = if ($onboardMemoryModules) {
+            [math]::round( ($onboardMemoryModules | Measure-Object -Property Capacity -Sum).Sum / 1GB, 2)
+        } else {
+            0
+        }
+
+        # Build detailed info for each memory module.
         $slotDetails = $memoryModules | ForEach-Object {
+            # Prefer SMBIOSMemoryType if available, otherwise use MemoryType.
+            $memType = if (($_.SMBIOSMemoryType) -and ($_.SMBIOSMemoryType -ne 0)) {
+                $_.SMBIOSMemoryType
+            } else {
+                $_.MemoryType
+            }
             [PSCustomObject]@{
-                Slot          = $_.DeviceLocator
-                Size          = if ($_.Capacity) { "$([math]::round($_.Capacity / 1GB, 2)) GB" } else { "Unknown" }
-                Architecture  = Get-MemoryTypeName -MemoryType $_.SMBIOSMemoryType
-                Speed         = if ($_.Speed) { "$($_.Speed) MHz" } else { "Unknown" }
+                Slot       = $_.DeviceLocator
+                Size       = if ($_.Capacity) { "$([math]::round($_.Capacity / 1GB, 2)) GB" } else { "Unknown" }
+                Type       = Get-MemoryTypeName -MemoryType $memType
+                Speed      = if ($_.Speed) { "$($_.Speed) MHz" } else { "Unknown" }
+                FormFactor = $_.FormFactor  # numeric value; you can map it to text if desired
             }
         }
 
-        # Fallback: Use WMI if CIM fails
-        if (-not $memoryModules -or $memoryModules.Count -eq 0) {
-            Write-Warning "Primary method failed. Falling back to WMI..."
-            $memoryModules = Get-WmiObject -Class Win32_PhysicalMemory -ErrorAction SilentlyContinue
-            $slotDetails = $memoryModules | ForEach-Object {
-                [PSCustomObject]@{
-                    Slot          = $_.DeviceLocator
-                    Size          = if ($_.Capacity) { "$([math]::round($_.Capacity / 1GB, 2)) GB" } else { "Unknown" }
-                    Architecture  = Get-MemoryTypeName -MemoryType $_.SMBIOSMemoryType
-                    Speed         = if ($_.Speed) { "$($_.Speed) MHz" } else { "Unknown" }
-                }
-            }
-        }
+        # Calculate available slots.
+        $availableSlots = if ([int]$totalSlots -gt 0) { [int]$totalSlots - [int]$usedSlots } else { "Unknown" }
 
-        # Ensure fallback values for missing data
-        if (-not $totalMemory -or $totalMemory -eq 0) {
-            Write-Warning "Unable to retrieve total memory using primary method. Using fallback..."
-            $totalMemory = [math]::round(($memoryModules | Measure-Object -Property Capacity -Sum).Sum / 1GB, 2)
-        }
-        if (-not $totalSlots -or $totalSlots -eq 0) {
-            $totalSlots = $memoryModules.Count
-        }
-        if (-not $usedSlots -or $usedSlots -eq 0) {
-            $usedSlots = $memoryModules.Count
-        }
-
-        # Return structured result
+        # Return a structured object.
         return [PSCustomObject]@{
-            TotalMemory     = "${totalMemory} GB"
-            TotalSlots      = $totalSlots
-            UsedSlots       = $usedSlots
-            OnboardMemory   = if ($onboardMemory) { "Yes" } else { "No" }
-            OnboardSize     = "${onboardMemorySize} GB"
-            SlotDetails     = $slotDetails
+            TotalMemoryGB  = "$totalMemoryGB GB"
+            TotalSlots     = $totalSlots
+            UsedSlots      = $usedSlots
+            AvailableSlots = $availableSlots
+            OnboardMemory  = if ($onboardMemoryModules.Count -gt 0) { "Yes" } else { "No" }
+            OnboardSizeGB  = "$onboardMemorySizeGB GB"
+            SlotDetails    = $slotDetails
         }
-    } catch {
+    }
+    catch {
         Write-Error "An error occurred while retrieving memory information: $_"
         return [PSCustomObject]@{
-            TotalMemory     = "Error"
-            TotalSlots      = "Error"
-            UsedSlots       = "Error"
-            OnboardMemory   = "Error"
-            OnboardSize     = "Error"
-            SlotDetails     = @([PSCustomObject]@{ Slot = "Error"; Size = "Error"; Architecture = "Error"; Speed = "Error" })
+            TotalMemoryGB  = "Error"
+            TotalSlots     = "Error"
+            UsedSlots      = "Error"
+            AvailableSlots = "Error"
+            OnboardMemory  = "Error"
+            OnboardSizeGB  = "Error"
+            SlotDetails    = @([PSCustomObject]@{ Slot = "Error"; Size = "Error"; Type = "Error"; Speed = "Error"; FormFactor = "Error" })
         }
     }
 }
-
 function Get-ProcessorInfo {
     try {
-        # Fetch processor details using Get-CimInstance
-        $processors = Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop | ForEach-Object {
+        # Define a WMI query for only the necessary properties.
+        $query = "SELECT Name, MaxClockSpeed, NumberOfCores, NumberOfLogicalProcessors, SocketDesignation FROM Win32_Processor"
+        $searcher = New-Object System.Management.ManagementObjectSearcher($query)
+        
+        # Force the result to be an array using @( ... )
+        $processors = @($searcher.Get() | ForEach-Object {
             [PSCustomObject]@{
-                Name              = $_.Name.Trim()
-                MaxClockSpeed     = "$($_.MaxClockSpeed) MHz"
-                Cores             = $_.NumberOfCores
-                LogicalProcessors = $_.NumberOfLogicalProcessors
-                Socket            = $_.SocketDesignation
+                Name              = ($_.Properties["Name"].Value).Trim()
+                MaxClockSpeed     = "$($_.Properties["MaxClockSpeed"].Value) MHz"
+                Cores             = $_.Properties["NumberOfCores"].Value
+                LogicalProcessors = $_.Properties["NumberOfLogicalProcessors"].Value
+                Socket            = $_.Properties["SocketDesignation"].Value
             }
+        })
+
+        # Determine the display color based on the first processor's name.
+        if ($processors.Count -gt 0) {
+            $procName = $processors[0].Name
+            $cpuColor = if ($procName -match "AMD") { "Red" }
+                        elseif ($procName -match "Intel") { "Cyan" }
+                        else { "Blue" }
+        }
+        else {
+            $cpuColor = "Blue"
         }
 
-        # Determine the color based on the processor brand
-        $cpuColor = if ($processors -and $processors.Name -match "AMD") { "Red" } `
-                    elseif ($processors -and $processors.Name -match "Intel") { "Cyan" } `
-                    else { "Blue" }
-
-        # Return processor info and color
         return [PSCustomObject]@{
             Info  = $processors
             Color = if ([Enum]::IsDefined([System.ConsoleColor], $cpuColor)) { $cpuColor } else { "Gray" }
         }
-    } catch {
-        # Handle any errors gracefully
+    }
+    catch {
         return [PSCustomObject]@{
             Info  = "Error retrieving processor information"
             Color = "Red"
         }
     }
 }
+
+
 
 
 function Get-GPUInfo {
@@ -282,31 +260,28 @@ function Get-WindowsVersion {
     return (Get-CimInstance -ClassName Win32_OperatingSystem).Caption
 }
 
-function Get-ActivationDetails {
+function Get-ActivationStatus {
     try {
-        $slmgrOutput = cscript /nologo $env:SystemRoot\System32\slmgr.vbs /dli 2>&1 | Out-String
+        # The ApplicationID for Windows is typically "55c92734-d682-4d71-983e-d6ec3f16059f"
+        # The query ensures we only get the Windows OS license entry (PartialProductKey is not null)
+        $filter = "ApplicationID='55c92734-d682-4d71-983e-d6ec3f16059f' AND PartialProductKey IS NOT NULL"
+        $windowsLicense = Get-CimInstance -ClassName SoftwareLicensingProduct -Filter $filter | Select-Object -First 1
 
-        $activationStatusPattern = "(License Status|Estado da Licen[çc]a|Estado da Ativa[çc][ãa]o):\s*(Licensed|Licenciado)"
-
-        if ($slmgrOutput -match $activationStatusPattern) {
-            $status = "$unicodeEmojiCheckMark Activated"
-            $activationColor = "Green"
-        } else {
-            $status = "$unicodeEmojiCrossMark Not Activated"
-            $activationColor = "Red"
+        if ($windowsLicense -and $windowsLicense.LicenseStatus -eq 1) {
+            return [PSCustomObject]@{
+                Status          = "$unicodeEmojiCheckMark Activated"
+                ActivationColor = "Green"
+            }
         }
-
-        if ($status -eq "Unknown") {
-            Write-Host "$unicodeEmojiWarning Unexpected slmgr output for debug:" -ForegroundColor Yellow
-            Write-Host $slmgrOutput
+        else {
+            return [PSCustomObject]@{
+                Status          = "$unicodeEmojiCrossMark Not Activated"
+                ActivationColor = "Red"
+            }
         }
-
-        return [PSCustomObject]@{
-            Status          = $status
-            ActivationColor = if ([Enum]::IsDefined([System.ConsoleColor], $activationColor)) { $activationColor } else { "Gray" }
-        }
-    } catch {
-        Write-Host "An error occurred while checking activation status: $_" -ForegroundColor Red
+    }
+    catch {
+        Write-Error "An error occurred while checking activation status: $_"
         return [PSCustomObject]@{
             Status          = "$unicodeEmojiWarning Unknown"
             ActivationColor = "Red"
@@ -314,7 +289,7 @@ function Get-ActivationDetails {
     }
 }
 
-function Show-WindowsProductKeys {
+function Get-WindowsProductKeys {
     try {
         # Function to decode the product key
         function Convert-Key {
@@ -587,83 +562,17 @@ function Start-CameraAppInBackground {
     }
 }
 
-function Get-BitLockerStatus {
-    try {
-        # Retrieve BitLocker status for all drives
-        $bitLockerDrives = Get-BitLockerVolume -ErrorAction SilentlyContinue
-
-        if (-not $bitLockerDrives) {
-            Write-Host "No drives found with BitLocker information." -ForegroundColor Yellow
-            return @([PSCustomObject]@{
-                DriveLetter           = "N/A"
-                ProtectionStatus      = "No Drives Found"
-                EncryptionPercentage  = "N/A"
-                LockStatus            = "N/A"
-            })
-        }
-
-        # Create an array to store results
-        $bitLockerStatus = @()
-
-        # Parse and prepare the BitLocker information
-        $bitLockerDrives | ForEach-Object {
-            $driveLetter = $_.MountPoint
-            $protectionStatus = switch ($_.ProtectionStatus) {
-                0 { "Off" }
-                1 { "On" }
-                2 { "Suspended" }
-                default { "Unknown" }
-            }
-            $encryptionPercentage = if ($_.VolumeStatus -eq "FullyEncrypted") {
-                "100%"
-            } elseif ($_.VolumeStatus -eq "Encrypting" -or $_.VolumeStatus -eq "Decrypting") {
-                "$($_.EncryptionPercentage)%"
-            } else {
-                "0%"
-            }
-            $lockStatus = switch ($_.LockStatus) {
-                0 { "Unlocked" }
-                1 { "Locked" }
-                default { "Unknown" }
-            }
-
-            # Add to the result array
-            $bitLockerStatus += [PSCustomObject]@{
-                DriveLetter           = $driveLetter
-                ProtectionStatus      = $protectionStatus
-                EncryptionPercentage  = $encryptionPercentage
-                LockStatus            = $lockStatus
-            }
-        }
-
-        # Return the result array
-        return $bitLockerStatus
-
-    } catch {
-        Write-Error "An error occurred while retrieving BitLocker status: $_"
-        return @([PSCustomObject]@{
-            DriveLetter           = "Error"
-            ProtectionStatus      = "Error"
-            EncryptionPercentage  = "Error"
-            LockStatus            = "Error"
-        })
-    }
-}
-
-
 function Get-SystemInfo {
     Write-Host " `n$unicodeEmojiCooling $unicodeEmojiCooling Refreshing System Information... $unicodeEmojiCooling $unicodeEmojiCooling" -ForegroundColor Yellow
 
     # Define tasks dynamically with a script block
     $tasks = @(
-        #@{ Name = "BitLocker Info"; Task = { Get-BitLockerStatus } },
         @{ Name = "Memory Info"; Task = { Get-TotalSticksRam } },
         @{ Name = "Processor Info"; Task = { Get-ProcessorInfo } },
         @{ Name = "GPU Info"; Task = { Get-GPUInfo } },
         @{ Name = "Windows Version"; Task = { Get-WindowsVersion } },
-        @{ Name = "Activation Details"; Task = { Get-ActivationDetails } },
-        #@{ Name = "Disk Info"; Task = { Get-DiskInfo } },
-        @{ Name = "System Product Keys"; Task = { Show-WindowsProductKeys } }
+        @{ Name = "Activation Details"; Task = { Get-ActivationStatus } },
+        @{ Name = "System Product Keys"; Task = { Get-WindowsProductKeys } }
     )
 
     $totalTasks = $tasks.Count
@@ -694,46 +603,4 @@ function Get-SystemInfo {
     return $systemInfo
 }
 
-<# # Fetch system information
-$data = Get-SystemInfo
 
-# Output the results in a loop
-foreach ($key in $data.PSObject.Properties) {
-    # Check if the value is a PSCustomObject or an IEnumerable
-    if ($key.Value -is [PSCustomObject] -or $key.Value -is [System.Collections.IEnumerable]) {
-        Write-Host "$($key.Name):"
-
-        if ($key.Name -eq "Memory Info" -and $key.Value -is [PSCustomObject]) {
-            # Memory Info with SlotDetails
-            Write-Host "  Total Memory: $($key.Value.TotalMemory)"
-            Write-Host "  Total Slots: $($key.Value.TotalSlots)"
-            Write-Host "  Used Slots: $($key.Value.UsedSlots)"
-            Write-Host "  Onboard Memory: $($key.Value.OnboardMemory)"
-            Write-Host "  Onboard Size: $($key.Value.OnboardSize)"
-            Write-Host "  Slot Details:"
-            foreach ($slot in $key.Value.SlotDetails) {
-                Write-Host "    Slot: $($slot.Slot) | Size: $($slot.Size) | Architecture: $($slot.Architecture) | Speed: $($slot.Speed)"
-            }
-        } elseif ($key.Name -eq "GPU Info" -and $key.Value -is [PSCustomObject]) {
-            # GPU Info
-            Write-Host "  GPUs:"
-            foreach ($gpu in $key.Value.GPUs) {
-                Write-Host "    Name: $($gpu.Name) | Dedicated: $($gpu.Dedicated) | Color: $($gpu.Color)"
-            }
-        } else {
-            # Generic handling for other PSCustomObject or IEnumerable values
-            foreach ($item in $key.Value) {
-                if ($item -is [PSCustomObject]) {
-                    foreach ($subKey in $item.PSObject.Properties) {
-                        Write-Host "  $($subKey.Name): $($subKey.Value)"
-                    }
-                } else {
-                    Write-Host "  $item"
-                }
-            }
-        }
-    } else {
-        # Simple property output
-        Write-Host "$($key.Name): $($key.Value)"    
-    }
- #>

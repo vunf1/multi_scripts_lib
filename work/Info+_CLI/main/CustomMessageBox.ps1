@@ -1,4 +1,6 @@
+
 Add-Type -AssemblyName System.Windows.Forms
+
 function Show-Confirmation {
     param (
         [string]$message,

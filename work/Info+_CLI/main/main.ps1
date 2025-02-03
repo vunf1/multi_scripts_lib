@@ -1,79 +1,5 @@
-<# Remove-Item -Path "$env:TEMP\\decoded_script.ps1" -Force #>
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-chcp 65001 | Out-Null # Set console code page to UTF-8
 
 $global:SystemInfoData = $null
-Add-Type -AssemblyName PresentationFramework
-Add-Type -AssemblyName WindowsFormsIntegration
-Add-Type -AssemblyName System.Windows.Forms
-function Set-ConsoleWindowPosition {
-    param (
-        [int]$OffsetX = 0,  # X-offset from the right edge of the screen
-        [int]$OffsetY = 0   # Y-offset from the bottom edge of the screen
-    )
-
-    # Get the console window handle
-    $consoleHandle = [System.Diagnostics.Process]::GetCurrentProcess().MainWindowHandle
-
-    # Import the user32.dll functions
-    Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-
-public class User32 {
-    [DllImport("user32.dll", SetLastError = true)]
-    public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
-
-    public struct RECT {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-}
-"@
-
-    # Get screen dimensions
-    $screenWidth = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width
-    $screenHeight = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height
-
-    # Get current console window size
-    $rect = New-Object User32+RECT
-    [User32]::GetWindowRect($consoleHandle, [ref]$rect)
-
-    # Calculate new position
-    $windowWidth = $rect.Right - $rect.Left
-    $windowHeight = $rect.Bottom - $rect.Top
-    $newX = $screenWidth - $windowWidth - $OffsetX
-    $newY = $screenHeight - $windowHeight - $OffsetY
-
-    # Move the window
-    [User32]::MoveWindow($consoleHandle, $newX, $newY, $windowWidth, $windowHeight, $true)
-}
-
-$host.UI.RawUI.WindowTitle = "Info+"
-Set-ConsoleWindowPosition -OffsetX 10 -OffsetY 10
-#$host.UI.RawUI.BufferSize = New-Object -TypeName System.Management.Automation.Host.Size(1, 10)
-$host.UI.RawUI.BackgroundColor = "Black"
-<# if ($PSScriptRoot) {
-    # Load dependent scripts from the current directory during development
-    . "$PSScriptRoot\CustomMessageBox.ps1"
-    . "$PSScriptRoot\DriversTest.ps1"
-    . "$PSScriptRoot\AudioTest.ps1"
-    . "$PSScriptRoot\CommandHelpers.ps1"
-    . "$PSScriptRoot\GetSystemInfo.ps1"
-    . "$PSScriptRoot\TweaksSystem.ps1"
-}else {
-    . "./CustomMessageBox.ps1"
-    . "./DriversTest.ps1"
-    . "./AudioTest.ps1"
-    . "./CommandHelpers.ps1"
-    . "./GetSystemInfo.ps1"
-    . "./TweaksSystem.ps1"
-} #>
 
 function Start-MemoryDiagnosticWithTask {
     try {
@@ -108,7 +34,9 @@ function Show-SystemInfo {
         $global:SystemInfoData = Get-SystemInfo
     }
     $data = $global:SystemInfoData
-    Clear-Host
+    if(-not $Debug){
+        Clear-Host
+    }
     Write-Host "=========================================================" -ForegroundColor Green
 
     Write-Host "       Developed with " -ForegroundColor White -NoNewline
@@ -120,76 +48,72 @@ function Show-SystemInfo {
     
     Write-Host "=========================================================" -ForegroundColor Green
     Write-Host "`n"
-    
-    Write-Host "`n$unicodeEmojiMagnifyingGlass System Information:" -ForegroundColor Cyan
 
-    # Disk Info as a Table
-<#     if ($data.'Disk Info' -and $data.'Disk Info'.Count -gt 0) {
-        try {
-            $data.'Disk Info' | Format-Table `
-                @{ Label = "Letter"; Expression = { $_.DriveLetter } }, `
-                @{ Label = "Name"; Expression = { $_.DiskName } }, `
-                @{ Label = "Total (GB)"; Expression = { $_.TotalSizeGB -replace " GB", "" } }, `
-                @{ Label = "Used (GB)"; Expression = { $_.UsedSizeGB -replace " GB", "" } } -AutoSize
-        } catch {
-            Write-Host "An error occurred while displaying disk information: $_" -ForegroundColor Red
-        }
-    } else {
-        Write-Host "No Disk Information Available" -ForegroundColor Red
-    } #>
-    
-    Write-Host " ------------------------------------|------------------------------------------- " -ForegroundColor White
-    Write-Host " | $unicodeEmojiLightBulb RAM Information                | $unicodeEmojiComputer Slot Information                      |" -ForegroundColor Cyan
-    Write-Host " ------------------------------------|------------------------------------------- " -ForegroundColor White
+    Write-Host "`n$unicodeEmojiMagnifyingGlass System Information:" -ForegroundColor Cyan
+    Write-Host " -----------------------------------|------------------------------------------- " -ForegroundColor White
+    Write-Host " | $unicodeEmojiLightBulb RAM Information               | $unicodeEmojiComputer Slot Information                      |" -ForegroundColor Cyan
+    Write-Host " -----------------------------------|------------------------------------------- " -ForegroundColor White
     
     # Prepare RAM Info Lines
     $ramInfoLines = @(
-        ("| Total Memory         {0,-12} " -f $data.'Memory Info'.TotalMemory),
-        ("| Total Slots          {0,-12} " -f $data.'Memory Info'.TotalSlots),
-        ("| Used Slots           {0,-12} " -f $data.'Memory Info'.UsedSlots),
-        ("| Onboard Memory       {0,-12} " -f $data.'Memory Info'.OnboardMemory),
-        ("| Onb Mem Size         {0,-12} " -f $data.'Memory Info'.OnboardSize)
+        ("| Total Memory         {0,-12}" -f $data.'Memory Info'.TotalMemoryGB),
+        ("| Total Slots          {0,-12}" -f $data.'Memory Info'.TotalSlots),
+        ("| Used Slots           {0,-12}" -f $data.'Memory Info'.UsedSlots),
+        ("| Available Slots      {0,-12}" -f $data.'Memory Info'.AvailableSlots),
+        ("| Onboard Memory       {0,-12}" -f $data.'Memory Info'.OnboardMemory),
+        ("| Onboard Mem Size     {0,-12}" -f $data.'Memory Info'.OnboardSizeGB)
     )
     
     # Prepare Slot Details Lines
     $slotDetailsLines = $data.'Memory Info'.SlotDetails | ForEach-Object {
-        "| {0,-10} {1,-8} {2,-8} {3,-12} " -f $_.Slot, $_.Size, $_.Architecture, $_.Speed
+        "| {0,-10} {1,-10} {2,-12} {3,-12}" -f $_.Slot, $_.Size, $_.Type, $_.Speed
     }
     
-    # Ensure Both Sections Have Equal Lines
+    # Ensure Both Sections Have Equal Lines by appending blank lines as needed.
     $maxLines = [math]::Max($ramInfoLines.Count, $slotDetailsLines.Count)
-    $ramInfoLines += ("                              " * ($maxLines - $ramInfoLines.Count))
-    $slotDetailsLines += ("                                             " * ($maxLines - $slotDetailsLines.Count))
+    
+    if ($ramInfoLines.Count -lt $maxLines) {
+        $ramInfoLines += (1..($maxLines - $ramInfoLines.Count) | ForEach-Object { "                              " })
+    }
+    
+    if ($slotDetailsLines.Count -lt $maxLines) {
+        $slotDetailsLines += (1..($maxLines - $slotDetailsLines.Count) | ForEach-Object { "                                             " })
+    }
     
     # Combine and Output the Table
     for ($i = 0; $i -lt $maxLines; $i++) {
         Write-Host "$($ramInfoLines[$i]) $($slotDetailsLines[$i])"
     }
     
-    Write-Host "|------------------------------------|-------------------------------------------"
+    Write-Host "|-----------------------------------|-------------------------------------------"
+    # CPU Info Display
+    if ($data.'Processor Info'.Info) {
+        $cpuArray = @($data.'Processor Info'.Info)
+        $cpuColor = if ($data.'Processor Info'.Color -and [Enum]::IsDefined([System.ConsoleColor], $data.'Processor Info'.Color)) {
+                        $data.'Processor Info'.Color 
+                    } else {
+                        "Gray"
+                    }
 
-    # CPU Info
-    if ($data.'Processor Info'.Info -is [PSCustomObject]) {
-        $cpuColor = if ($data.'Processor Info'.Color -and [Enum]::IsDefined([System.ConsoleColor], $data.'Processor Info'.Color)) { 
-            $data.'Processor Info'.Color 
-        } else { "Gray" }
-
-        # Iterate over each processor and display its details
         $first = $true
-        foreach ($cpu in $data.'Processor Info'.Info) {
+        foreach ($cpu in $cpuArray) {
             if ($first) {
-                # Write the first CPU entry after the "| CPU                        |"
+                # Write header and the first CPU entry.
                 Write-Host "$unicodeEmojiCPU CPU                        " -NoNewline
                 Write-Host " $($cpu.Name) $($cpu.MaxClockSpeed) $($cpu.Cores) $($cpu.LogicalProcessors) $($cpu.Socket)" -ForegroundColor $cpuColor
                 $first = $false
-            } else {
-                # Align additional CPU entries
-                Write-Host "                              $($cpu.Name) $($cpu.MaxClockSpeed) $($cpu.Cores) $($cpu.LogicalProcessors)  $($cpu.Socket)" -ForegroundColor $cpuColor
+            }
+            else {
+                # Align additional CPU entries.
+                Write-Host "                              " -NoNewline
+                Write-Host " $($cpu.Name) $($cpu.MaxClockSpeed) $($cpu.Cores) $($cpu.LogicalProcessors) $($cpu.Socket)" -ForegroundColor $cpuColor
             }
         }
-    } else {
+    }
+    else {
         Write-Host "$unicodeEmojiCPU CPU                        No CPU information available" -ForegroundColor Red
     }
+
 
     # GPU Info Display
     if ($data.'GPU Info'.GPUs -and $data.'GPU Info'.GPUs.Count -gt 0) {
@@ -216,12 +140,28 @@ function Show-SystemInfo {
     Write-Host "$unicodeEmojiBug Windows Version             $($data.'Windows Version')"
 
     # Activation Status
-    $activationColor = if ($data.'Activation Details'.ActivationColor -and [Enum]::IsDefined([System.ConsoleColor], $data.'Activation Details'.ActivationColor)) { 
-        $data.'Activation Details'.ActivationColor 
-    } else { "Gray" }
-    Write-Host "$unicodeEmojiNetwork Activation Status          " -NoNewline
-    Write-Host " $($data.'Activation Details'.Status)" -ForegroundColor $activationColor
-
+    if ($data.'Activation Details') {
+        $activationArray = @($data.'Activation Details')
+        $first = $true
+        foreach ($act in $activationArray) {
+            $actColor = if ($act.ActivationColor -and [Enum]::IsDefined([System.ConsoleColor], $act.ActivationColor)) { 
+                $act.ActivationColor 
+            } else { "Gray" }
+            
+            if ($first) {
+                Write-Host "$unicodeEmojiNetwork Activation Status         " -NoNewline
+                Write-Host "  $($act.Status)" -ForegroundColor $actColor
+                $first = $false
+            }
+            else {
+                Write-Host "                                  " -NoNewline
+                Write-Host " $($act.Status)" -ForegroundColor $actColor
+            }
+        }
+    }
+    else {
+        Write-Host "$unicodeEmojiNetwork Activation Status         No Activation information available" -ForegroundColor Red
+    }
     # Product Keys
     $productKeys = $data.'System Product Keys'
 
@@ -251,7 +191,9 @@ function Show-SystemInfo {
 
 }
 
-Clear-Host
+if(-not $Debug){
+    Clear-Host
+}
 
 Start-Files
 Start-CameraAppInBackground
@@ -260,10 +202,10 @@ Show-SystemInfo
 # Main Menu
 function Show-MainMenu {
     Write-Host "`nMain Menu - Choose an option (0 to EXIT):" -ForegroundColor Yellow
-    Write-Host "1 - System Information & Tweaks"
-    Write-Host "2 - Drivers and Tests"
-    Write-Host "3 - System Maintenance"
-    Write-Host "0 - Exit"
+    Write-Host "$unicodeEmojiFullwidthOne - System Information & Tweaks (1)"
+    Write-Host "$unicodeEmojiFullwidthTwo - Drivers and Tests (2)"
+    Write-Host "$unicodeEmojiFullwidthThree - System Maintenance (3)"
+    Write-Host "$unicodeEmojiFullwidthZero - Exit (0)"
     Write-Host " "
 }
 
@@ -276,14 +218,19 @@ function MainMenuOption {
         "0" { 
             Write-Host "`n $unicodeEmojiFan  Exiting the program. Goodbye! $unicodeEmojiFan" -ForegroundColor Red
             $global:exitProgram = $true
-            [System.Environment]::Exit(0) # Forcefully terminate the current console
+            if(-not $Local){
+                [System.Environment]::Exit(0) # Forcefully terminate the current console
+
+            }
         }
     }
 }
 
 # System Information & Tweaks Menu
 function Show-SystemInfoMenu {
-    Clear-Host
+    if(-not $Debug){
+        Clear-Host
+    }
     Show-SystemInfo
     Write-Host "`nSystem Information & Tweaks - Choose an option:" -ForegroundColor Yellow
     Write-Host "1 - Refresh System Information"
@@ -321,7 +268,9 @@ function SystemInfoOption {
             Disable-BitLockerOnAllDrives
         }
         "0" {
-            Clear-Host
+            if(-not $Debug){
+                Clear-Host
+            }
             Show-SystemInfo
              return }
     }
@@ -347,7 +296,9 @@ function Show-SystemInfoSubmenu {
 
 # Drivers and Tools Menu
 function Show-DriversToolsMenu {
-    Clear-Host
+    if(-not $Debug){
+        Clear-Host
+    }
     Show-SystemInfo
     Write-Host "`nDrivers and Tools - Choose an option:" -ForegroundColor Yellow
     Write-Host "1 - Drivers Links"
@@ -378,7 +329,9 @@ function DriversToolsOption {
             Show-YouTubeIframe
         }
         "0" { 
-            Clear-Host
+            if(-not $Debug){
+                Clear-Host
+            }
             Show-SystemInfo
             return }
     }
@@ -404,7 +357,9 @@ function Show-DriversToolsSubmenu {
 
 # System Maintenance Menu
 function Show-MaintenanceMenu {
-    Clear-Host
+    if(-not $Debug){
+        Clear-Host
+    }
     Show-SystemInfo
     Write-Host "`nSystem Maintenance - Choose an option:" -ForegroundColor Yellow
     Write-Host "1 - Cache Clean"
@@ -425,7 +380,9 @@ function MaintenanceOption {
             Start-MemoryDiagnosticWithTask
         }
         "0" { 
-            Clear-Host
+            if(-not $Debug){
+                Clear-Host
+            }
             Show-SystemInfo
             return }
     }
