@@ -38,12 +38,12 @@ function Test-Syntax {
 
 # Main combining logic
 $scriptFiles = @(
-    "./main/DriversTest.ps1",
-    "./main/AudioTest.ps1",
-    "./main/CommandHelpers.ps1",
-    "./main/GetSystemInfo.ps1",
     "./main/TweaksSystem.ps1",
     "./main/CustomMessageBox.ps1",
+    "./main/CommandHelpers.ps1",
+    "./main/DriversTest.ps1",
+    "./main/AudioTest.ps1",
+    "./main/GetSystemInfo.ps1",
     "./main/main.ps1"
 )
 
@@ -120,37 +120,43 @@ foreach ($file in $scriptFiles) {
 $endTime = Get-Date
 $elapsedTime = ($endTime - $startTime).TotalSeconds
 
-# Friendlier Summary Design
-Write-Host "`n========== Summary ==========" -ForegroundColor Cyan
-Write-Host "Total Files Combined: $($combinedFiles.Count)" -ForegroundColor DarkCyan
-Write-Host "Total Lines Combined: $totalLines" -ForegroundColor DarkCyan
-Write-Host "Total Size Combined: $([math]::Round($totalSizeBytes / 1KB, 2)) KB" -ForegroundColor DarkCyan
-Write-Host "Output File: $outputFile" -ForegroundColor DarkCyan
+$iconSyntaxError = [char]0x274C     # ❌ Cross mark
+$iconWarning     = [char]0x26A0     # ⚠ Warning sign
+$iconSuccess     = [char]0x2705     # ✅ Check mark
+$iconClock       = [char]0x23F0     # ⏰ Alarm clock
 
-# Display syntax errors count in red if greater than 0
+
+#Summary Design
+Write-Host "`n========== Summary ==========" -ForegroundColor Cyan
+Write-Host "$iconFiles Total Files Combined: $($combinedFiles.Count)" -ForegroundColor DarkCyan
+Write-Host "$iconLines Total Lines Combined: $totalLines" -ForegroundColor DarkCyan
+Write-Host "$iconSize Total Size Combined: $([math]::Round($totalSizeBytes / 1KB, 2)) KB" -ForegroundColor DarkCyan
+Write-Host "$iconOutput Output File: $outputFile" -ForegroundColor DarkCyan
+
+# Display syntax errors count in red if greater than 0, otherwise in green
 if ($syntaxErrors -gt 0) {
-    Write-Host "Syntax Errors: $syntaxErrors" -ForegroundColor Red
+    Write-Host "$iconSyntaxError Syntax Errors: $syntaxErrors" -ForegroundColor Red
     Write-Host "Details:"
     foreach ($detail in $syntaxErrorDetails) {
-        Write-Host $detail -ForegroundColor Red
+        Write-Host "   $iconWarning $detail" -ForegroundColor Red
     }
 } else {
-    Write-Host "Syntax Errors: $syntaxErrors" -ForegroundColor Green
+    Write-Host "$iconSuccess Syntax Errors: $syntaxErrors" -ForegroundColor Green
 }
 
-# Display general errors count in red if greater than 0
+# Display general errors count in red if greater than 0, otherwise in green
 if ($generalErrors -gt 0) {
-    Write-Host "General Errors Logged: $generalErrors" -ForegroundColor Red
+    Write-Host "$iconSyntaxError General Errors Logged: $generalErrors" -ForegroundColor Red
 } else {
-    Write-Host "General Errors Logged: $generalErrors" -ForegroundColor Green
+    Write-Host "$iconSuccess General Errors Logged: $generalErrors" -ForegroundColor Green
 }
 
-# Success message if no errors
+# Output a success message if no errors, or a warning if there are errors
 if ($syntaxErrors -eq 0 -and $generalErrors -eq 0) {
-    Write-Host "`nSuccess: All scripts combined without errors!" -ForegroundColor Green
+    Write-Host "`n$iconSuccess Success: All scripts combined without errors!" -ForegroundColor Green
 } else {
-    Write-Host "`nProcess completed with errors." -ForegroundColor Yellow
+    Write-Host "`n$iconWarning Process completed with errors." -ForegroundColor Yellow
 }
 
-Write-Host "Completed at: $endTime | Total Time: $elapsedTime seconds" -ForegroundColor Cyan
+Write-Host "$iconClock Completed at: $endTime | Total Time: $elapsedTime seconds" -ForegroundColor Cyan
 Write-Host "=============================" -ForegroundColor Cyan

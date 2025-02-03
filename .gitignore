@@ -42,3 +42,4 @@ work/Info+_CLI/package222.psd1
 /work/Info+_CLI/tests
 work/Info+_CLI/infoplus.ps1
 work/Info+_CLI/encoded_infoplus.txt
+work/Info+_CLI/GUI/GUIencode.py
