@@ -43,6 +43,7 @@ $scriptFiles = @(
     "./main/CommandHelpers.ps1",
     "./main/DriversTest.ps1",
     "./main/AudioTest.ps1",
+    "./main/ScreenTests.ps1",
     "./main/GetSystemInfo.ps1",
     "./main/main.ps1"
 )

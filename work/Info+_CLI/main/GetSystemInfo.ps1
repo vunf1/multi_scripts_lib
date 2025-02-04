@@ -255,19 +255,34 @@ function Get-GPUInfo {
     }
 }
 
-
 function Get-WindowsVersion {
     return (Get-CimInstance -ClassName Win32_OperatingSystem).Caption
 }
-
 function Get-ActivationStatus {
     try {
-        # The ApplicationID for Windows is typically "55c92734-d682-4d71-983e-d6ec3f16059f"
-        # The query ensures we only get the Windows OS license entry (PartialProductKey is not null)
-        $filter = "ApplicationID='55c92734-d682-4d71-983e-d6ec3f16059f' AND PartialProductKey IS NOT NULL"
-        $windowsLicense = Get-CimInstance -ClassName SoftwareLicensingProduct -Filter $filter | Select-Object -First 1
+        # Run 'slmgr.vbs /xpr' to check activation status
+        $activationOutput = (cscript //nologo C:\Windows\System32\slmgr.vbs /xpr) -join "`n"
 
-        if ($windowsLicense -and $windowsLicense.LicenseStatus -eq 1) {
+        # Detect system language (LCID)
+        $language = (Get-Culture).LCID
+
+        # Define activation messages based on language
+        $activationMessages = @{
+            "1033" = "The machine is permanently activated"  # English (US)
+            "2057" = "The machine is permanently activated"  # English (UK)
+            "1046" = "O computador está ativado permanentemente"  # Portuguese (Brazil)
+            "2070" = "O computador está permanentemente ativado"  # Portuguese (Portugal)
+        }
+
+        # Get the correct activation message (fallback to English if not found)
+        $activationText = if ($activationMessages.ContainsKey($language)) { 
+            $activationMessages[$language] 
+        } else { 
+            $activationMessages["1033"] 
+        }
+
+        # Check if the output contains the activation confirmation
+        if ($activationOutput -match [regex]::Escape($activationText)) {
             return [PSCustomObject]@{
                 Status          = "$unicodeEmojiCheckMark Activated"
                 ActivationColor = "Green"
@@ -290,40 +305,54 @@ function Get-ActivationStatus {
 }
 
 function Get-WindowsProductKeys {
-    try {
-        # Function to decode the product key
-        function Convert-Key {
-            param ([byte[]]$DigitalProductId)
-            $keyChars = "BCDFGHJKMPQRTVWXY2346789"
-            $decodedKey = ""
-            $key = [System.Collections.Generic.List[byte]]::new()
+    [CmdletBinding()]
+    param()
+
+    # Helper function to decode the DigitalProductId to a product key.
+    function Convert-Key {
+        param (
+            [byte[]]$DigitalProductId
+        )
+        # Character set used for the product key
+        $keyChars = "BCDFGHJKMPQRTVWXY2346789"
+        $decodedKey = ""
+        $key = New-Object System.Collections.Generic.List[byte]
         
-            # Initialize the key array from DigitalProductId
-            for ($i = 52; $i -ge 52 - 15; $i--) { $key.Add($DigitalProductId[$i]) }
-        
-            # Decode the key
-            for ($i = 0; $i -lt 25; $i++) {
-                $current = 0
-                for ($j = 14; $j -ge 0; $j--) {
-                    $current = ($current * 256) + $key[$j]
-                    $key[$j] = [math]::Floor($current / 24)
-                    $current = $current % 24
-                }
-                $decodedKey = $keyChars[$current] + $decodedKey
-            }
-        
-            if ($decodedKey.Length -ne 25) {
-                throw "Decoded product key length is invalid: $($decodedKey.Length)"
-            }
-        
-            # Insert dashes for readability (split into groups of 5 characters)
-            return ($decodedKey -replace ".{5}", '$&-').TrimEnd('-')
+        # For Windows 7 and later, the 15-byte key is stored starting at offset 52.
+        for ($i = 52; $i -lt 52 + 15; $i++) {
+            $key.Add($DigitalProductId[$i])
         }
 
-        # Retrieve the installed product key
-        $digitalProductId = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -ErrorAction SilentlyContinue).DigitalProductId
-        $installedKey = if ($digitalProductId) { Convert-Key -DigitalProductId $digitalProductId } else { "Not Found" }
-        # Fallback to WMI query only if necessary
+        # Decode 25 characters from the 15-byte key.
+        for ($i = 0; $i -lt 25; $i++) {
+            $current = 0
+            for ($j = 14; $j -ge 0; $j--) {
+                $current = ($current * 256) + $key[$j]
+                $key[$j] = [math]::Floor($current / 24)
+                $current = $current % 24
+            }
+            $decodedKey = $keyChars[$current] + $decodedKey
+        }
+
+        if ($decodedKey.Length -ne 25) {
+            throw "Decoded product key length is invalid: $($decodedKey.Length)"
+        }
+
+        # Insert dashes every 5 characters for readability.
+        return ($decodedKey -replace "(.{5})", '$1-').TrimEnd('-')
+    }
+
+    try {
+        $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"
+        $regProps = Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue
+        $digitalProductId = $regProps.DigitalProductId
+
+        $installedKey = "Not Found"
+        if ($digitalProductId) {
+            $installedKey = Convert-Key -DigitalProductId $digitalProductId
+        }
+
+        # Fallback: query WMI if no key was found in the registry.
         if ($installedKey -eq "Not Found") {
             try {
                 $license = Get-CimInstance -Query "SELECT * FROM SoftwareLicensingProduct WHERE PartialProductKey IS NOT NULL AND LicenseStatus=1" -ErrorAction Stop
@@ -331,31 +360,33 @@ function Get-WindowsProductKeys {
                     $installedKey = Convert-Key -DigitalProductId $license.DigitalProductId
                 }
             } catch {
-                $installedKey = "$unicodeEmojiCrossMark Not Found"
-            }   
-        }
-        # Check if the installed key matches a generic key
-        if ($WindowsGenericKeys) {
-            $matchedKey = $WindowsGenericKeys | Where-Object { $_.Key -eq $installedKey }
-            if ($matchedKey) {
-                $installedKey += " (Generic key: $($matchedKey.Edition))"
+                $installedKey = "Not Found"
             }
         }
 
-        # Retrieve the OEM key
+        # If a global variable $WindowsGenericKeys exists, check if the installed key is generic.
+        if ($WindowsGenericKeys -and $installedKey -ne "Not Found") {
+            $matchedKey = $WindowsGenericKeys | Where-Object { $_.Key -eq $installedKey } | Select-Object -First 1
+            if ($matchedKey) {
+                $installedKey = "$installedKey (Generic key: $($matchedKey.Edition))"
+            }
+        }
+
+        # Retrieve the OEM key.
         $oemKey = Get-OEMKey
-        # Assign colors for display
+
         $installedKeyColor = if ($installedKey -ne "Not Found") { "Yellow" } else { "Red" }
+        
         $oemKeyColor = if ($oemKey -eq "Not Found") { "Yellow" } elseif ($oemKey -eq "Error") { "Red" } else { "Green" }
 
-        # Validate colors
+        # Validate the color names against System.ConsoleColor.
         $installedKeyColor = if ([Enum]::IsDefined([System.ConsoleColor], $installedKeyColor)) { $installedKeyColor } else { "Red" }
         $oemKeyColor = if ([Enum]::IsDefined([System.ConsoleColor], $oemKeyColor)) { $oemKeyColor } else { "Red" }
         
         return [PSCustomObject]@{
             InstalledKey = @{
                 Value = $installedKey
-                Color = $0installedKeyColor
+                Color = $installedKeyColor
             }
             OEMKey = @{
                 Value = $oemKey
@@ -366,11 +397,11 @@ function Get-WindowsProductKeys {
         Write-Error "An error occurred: $_"
         return [PSCustomObject]@{
             InstalledKey = @{
-                Value =  "Error"
+                Value = "Error"
                 Color = "Red"
             }
             OEMKey = @{
-                Value =  "Error"
+                Value = "Error"
                 Color = "Red"
             }
         }
@@ -583,17 +614,17 @@ function Get-SystemInfo {
     for ($i = 0; $i -lt $totalTasks; $i++) {
         $taskName = $tasks[$i].Name
         $task = $tasks[$i].Task
-
+    
         Write-Host " $unicodeEmojiInformation : $taskName Data...       $unicodeEmojiHourglass " -ForegroundColor Cyan -NoNewline
-
+    
         try {
             $executionTime = Measure-Command {
                 $result = & $task
                 $systemInfo | Add-Member -MemberType NoteProperty -Name $taskName -Value $result
             }
-            Write-Host "$($executionTime.TotalSeconds) seconds." -ForegroundColor Green
+            Write-Host "`r$unicodeEmojiCheckMark $taskName completed in $($executionTime.TotalSeconds) seconds." -ForegroundColor Green
         } catch {
-            Write-Host "`nTask '$taskName' encountered an error: $_" -ForegroundColor Red
+            Write-Host "`n$unicodeEmojiWarning Task '$taskName' encountered an error: $_" -ForegroundColor Red
             $systemInfo | Add-Member -MemberType NoteProperty -Name $taskName -Value "Error"
         }
     }

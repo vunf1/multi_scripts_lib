@@ -48,6 +48,8 @@ function Show-SystemInfo {
     
     Write-Host "=========================================================" -ForegroundColor Green
     Write-Host "`n"
+    Write-Host "`n"
+    Write-Host "`n"
 
     Write-Host "`n$unicodeEmojiMagnifyingGlass System Information:" -ForegroundColor Cyan
     Write-Host " -----------------------------------|------------------------------------------- " -ForegroundColor White
@@ -209,6 +211,7 @@ function Show-MainMenu {
     Write-Host " "
 }
 
+
 function MainMenuOption {
     param ([ConsoleKeyInfo]$Key)
     switch ($Key.KeyChar) {
@@ -305,6 +308,8 @@ function Show-DriversToolsMenu {
     Write-Host "2 - Keyboard Test"
     Write-Host "3 - Battery Test"
     Write-Host "4 - Audio Test"
+    Write-Host "5 - Stuck Pixel"
+    Write-Host "6 - Dead Pixel"
     Write-Host "0 - Back to Main Menu"
     Write-Host " "
 }
@@ -328,6 +333,14 @@ function DriversToolsOption {
             Write-Host "`nStarting Audio Test..." -ForegroundColor Green
             Show-YouTubeIframe
         }
+        "5" {
+            Write-Host "`nStarting Stuck Pixel..." -ForegroundColor Green
+            Test-StuckPixel
+        }
+        "6" {
+            Write-Host "`nStarting Dead Pixel..." -ForegroundColor Green
+            Test-DeadPixel
+        }
         "0" { 
             if(-not $Debug){
                 Clear-Host
@@ -347,7 +360,7 @@ function Show-DriversToolsSubmenu {
 
         do {
             $key = [System.Console]::ReadKey($true)
-        } while (-not ($key.KeyChar -match '^[0-4]$'))
+        } while (-not ($key.KeyChar -match '^[0-6]$'))
 
         DriversToolsOption $key
         if ($key.KeyChar -eq "0") { break }

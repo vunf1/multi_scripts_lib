@@ -4,7 +4,7 @@ $inputFile = ".\infoplus.ps1" # PowerShell script
 $outputFile = "$([Environment]::GetFolderPath('Desktop'))\infoplus.exe" # Target output
 $iconFile = ".\images\icons\icon4.ico" # icon file
 $ps2exePath = ".\tools\PS2EXE-GUI\ps2exe.ps1" # Path to ps2exe.ps1
-$version = "8.5.0"
+$version = "9.0.0"
 $description = "PowerShell-based system utility with modular design and task monitoring."
 $productName = "InfoPlus"
 $company = "Maia"
@@ -72,6 +72,7 @@ try {
         -company $company `
         -copyright $copyright `
         -requireAdmin `
+        -x64 `
         -MTA `
         -runtime40
 
