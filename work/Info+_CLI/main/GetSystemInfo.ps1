@@ -260,39 +260,31 @@ function Get-WindowsVersion {
 }
 function Get-ActivationStatus {
     try {
-        # Run 'slmgr.vbs /xpr' to check activation status
-        $activationOutput = (cscript //nologo C:\Windows\System32\slmgr.vbs /xpr) -join "`n"
+        $activationKey = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SoftwareProtectionPlatform"
 
-        # Detect system language (LCID)
-        $language = (Get-Culture).LCID
+        $licenseStatus = Get-ItemProperty -Path $activationKey -Name "ActivationStatus" -ErrorAction SilentlyContinue
 
-        # Define activation messages based on language
-        $activationMessages = @{
-            "1033" = "The machine is permanently activated"  # English (US)
-            "2057" = "The machine is permanently activated"  # English (UK)
-            "1046" = "O computador está ativado permanentemente"  # Portuguese (Brazil)
-            "2070" = "O computador está permanentemente ativado"  # Portuguese (Portugal)
-        }
-
-        # Get the correct activation message (fallback to English if not found)
-        $activationText = if ($activationMessages.ContainsKey($language)) { 
-            $activationMessages[$language] 
-        } else { 
-            $activationMessages["1033"] 
-        }
-
-        # Check if the output contains the activation confirmation
-        if ($activationOutput -match [regex]::Escape($activationText)) {
+        if ($licenseStatus.ActivationStatus -eq 1) {
             return [PSCustomObject]@{
                 Status          = "$unicodeEmojiCheckMark Activated"
                 ActivationColor = "Green"
             }
         }
-        else {
+
+        # Fallback: Check Windows Licensing using a fast WMI query
+        $fastCheck = gwmi -Query "SELECT LicenseStatus FROM SoftwareLicensingProduct WHERE PartialProductKey IS NOT NULL" -Namespace "root\cimv2" -ErrorAction SilentlyContinue | Select-Object -First 1
+
+        if ($fastCheck.LicenseStatus -eq 1) {
             return [PSCustomObject]@{
-                Status          = "$unicodeEmojiCrossMark Not Activated"
-                ActivationColor = "Red"
+                Status          = "$unicodeEmojiCheckMark Activated"
+                ActivationColor = "Green"
             }
+        }
+
+        # If both checks fail, Windows is not activated
+        return [PSCustomObject]@{
+            Status          = "$unicodeEmojiCrossMark Not Activated"
+            ActivationColor = "Red"
         }
     }
     catch {
@@ -303,6 +295,8 @@ function Get-ActivationStatus {
         }
     }
 }
+
+
 
 function Get-WindowsProductKeys {
     [CmdletBinding()]
@@ -609,7 +603,23 @@ function Get-SystemInfo {
     $totalTasks = $tasks.Count
 
     $systemInfo = [PSCustomObject]@{}
-
+    $asciiHard = @"
+     _   _               _ 
+    | | | | __ _ _ __ __| |
+    | |_| |/ _`  |'__/  _`  |
+    |  _  | (_| | | | (_| |
+    |_| |_|\__,_|_|  \__,_|
+                            
+"@
+    $asciiStock = @"
+    ____  _             _    
+                                / ___|| |_ ___   ___| | __
+                                \___ \| __/ _ \ / __| |/ /
+                                 ___) | || (_) | (__|   < 
+                                |____/ \__\___/ \___|_|\_\
+                            
+"@
+    Write-Host $asciiHard -NoNewline $asciiStock -ForegroundColor Cyan
     Write-Host "`n$unicodeEmojiLock $unicodeEmojiLock PRESS[ENTER] $unicodeEmojiLock $unicodeEmojiLock<<<< " -ForegroundColor Red
     for ($i = 0; $i -lt $totalTasks; $i++) {
         $taskName = $tasks[$i].Name

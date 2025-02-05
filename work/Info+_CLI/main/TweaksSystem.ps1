@@ -17,10 +17,7 @@ function Set-ConsoleWindowPosition {
         [int]$OffsetY = 0   # Y-offset from the bottom edge of the screen
     )
 
-    # Get the console window handle
-    $consoleHandle = [System.Diagnostics.Process]::GetCurrentProcess().MainWindowHandle
-
-    # Import the user32.dll functions
+    # Import user32.dll functions
     Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
@@ -39,15 +36,28 @@ public class User32 {
         public int Bottom;
     }
 }
-"@
+"@ -PassThru | Out-Null
 
-    # Get screen dimensions
-    $screenWidth = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width
-    $screenHeight = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height
+    # Get console window handle (ensure it's a valid IntPtr)
+    $consoleHandle = [System.Diagnostics.Process]::GetCurrentProcess().MainWindowHandle
+
+    if ($consoleHandle -eq [IntPtr]::Zero) {
+        Write-Error "Failed to get console window handle."
+        return
+    }
+
+    # Get screen dimensions (avoid unnecessary Out-Null)
+    Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
+    $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+    $screenWidth = $screen.Width
+    $screenHeight = $screen.Height
 
     # Get current console window size
     $rect = New-Object User32+RECT
-    [User32]::GetWindowRect($consoleHandle, [ref]$rect)
+    if (-not [User32]::GetWindowRect($consoleHandle, [ref]$rect)) {
+        Write-Error "Failed to get console window dimensions."
+        return
+    }
 
     # Calculate new position
     $windowWidth = $rect.Right - $rect.Left
@@ -55,10 +65,17 @@ public class User32 {
     $newX = $screenWidth - $windowWidth - $OffsetX
     $newY = $screenHeight - $windowHeight - $OffsetY
 
-    # Move the window
-    [User32]::MoveWindow($consoleHandle, $newX, $newY, $windowWidth, $windowHeight, $true)
+    # Move the window (ensure it succeeds)
+    if (-not [User32]::MoveWindow($consoleHandle, $newX, $newY, $windowWidth, $windowHeight, $true)) {
+        Write-Error "Failed to move console window."
+    }
 }
 
+
+
+
+
+Set-ConsoleWindowPosition -OffsetX 5 -OffsetY 30
 if ($Debug) {
     Write-Host "Debug mode is ON." -ForegroundColor Yellow
     Write-Host "Console will not be clean." -ForegroundColor Cyan
@@ -68,7 +85,6 @@ if ($Debug) {
     Write-Host "Debug mode is OFF."
     $host.UI.RawUI.WindowTitle = "Info+"
 }
-Set-ConsoleWindowPosition -OffsetX 10 -OffsetY 10
 $host.UI.RawUI.BackgroundColor = "Black"
 function Clear-SystemCache {
     

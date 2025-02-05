@@ -51,6 +51,7 @@ function Show-SystemInfo {
     Write-Host "`n"
     Write-Host "`n"
 
+
     Write-Host "`n$unicodeEmojiMagnifyingGlass System Information:" -ForegroundColor Cyan
     Write-Host " -----------------------------------|------------------------------------------- " -ForegroundColor White
     Write-Host " | $unicodeEmojiLightBulb RAM Information               | $unicodeEmojiComputer Slot Information                      |" -ForegroundColor Cyan

@@ -1,4 +1,3 @@
-
 function Test-StuckPixel {
     $url = "https://www.jscreenfix.com/fix.html"
     $edgePath = Get-EdgePath
@@ -38,11 +37,23 @@ function Test-StuckPixel {
             "--block-new-web-contents"
         )
         
+        # Start Edge
         Start-Process -FilePath $edgePath -ArgumentList $arguments
+
+        # Wait a few seconds for Edge to launch before restoring the hosts file
+        Start-Sleep -Seconds 3
+
+        # Restore the hosts file by removing added entries
+        $updatedHosts = Get-Content -Path $hostsFile | Where-Object { $_ -notmatch [regex]::Escape($adEntries -join "|") }
+        Set-Content -Path $hostsFile -Value $updatedHosts
+
+        Write-Host "Restored original hosts file." -ForegroundColor Green
+
     } catch {
         Write-Host "Error during execution: $_" -ForegroundColor Red
     }
 }
+
 
 
 function Test-DeadPixel {
