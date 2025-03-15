@@ -1,0 +1,28 @@
+{
+    "gg245": {
+        "200873142700562": {
+            "Disk S/N": "SAMSUNG_MZNLN512HAJQ-00007_S3UANX0M508687, SanDisk_X400_M.2_2280_512GB_165337420182, SAMSUNG_MZNLN512HAJQ-00007_S3UANX0M503595, 1850D8801447, S4EWNX0R120731K",
+            "RAM S/N": "18806798, 188063C7, 187ECCCB, 1880636D",
+            "Battery S/N": "Unknown",
+            "CPU S/N": "100F8700FFFB8B17",
+            "BIOS S/N": "37113259-c007-cee5-69e6-3c7c3f2b39cd",
+            "GPU S/N": "GPU-f9720b15-9234-16aa-aa64-b9ac4d6e0d11",
+            "NIC S/N": "3c:7c:3f:2b:39:cd, 1c:ce:51:77:a6:5c",
+            "Power S/N": "Unknown",
+            "Display S/N": "Unknown, CNK9402J56"
+        }
+    },
+    "gg2451": {
+        "200873142700562": {
+            "Disk S/N": "SAMSUNG_MZNLN512HAJQ-00007_S3UANX0M508687, SanDisk_X400_M.2_2280_512GB_165337420182, SAMSUNG_MZNLN512HAJQ-00007_S3UANX0M503595, 1850D8801447, S4EWNX0R120731K",
+            "RAM S/N": "18806798, 188063C7, 187ECCCB, 1880636D",
+            "Battery S/N": "Unknown",
+            "CPU S/N": "100F8700FFFB8B17",
+            "BIOS S/N": "37113259-c007-cee5-69e6-3c7c3f2b39cd",
+            "GPU S/N": "GPU-f9720b15-9234-16aa-aa64-b9ac4d6e0d11",
+            "NIC S/N": "3c:7c:3f:2b:39:cd, 1c:ce:51:77:a6:5c",
+            "Power S/N": "Unknown",
+            "Display S/N": "Unknown, CNK9402J56"
+        }
+    }
+}
